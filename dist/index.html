@@ -2,115 +2,93 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="沿汴河走过北宋汴京的郊野、虹桥、街市与城门。">
-  <meta name="theme-color" content="#182019">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#1e261e">
+  <meta name="description" content="沿汴河步行，上虹桥，穿城门。原创 Three.js 北宋汴京白昼实景。">
   <title>清明上河图 · 汴京一日</title>
   <link rel="icon" href="assets/seal.png">
   <link rel="stylesheet" href="style.css">
-  <script defer src="city.js"></script>
+  <script defer src="city3d.js"></script>
 </head>
 <body>
-  <header class="masthead" id="top">
-    <a class="brand" href="#top" id="home" aria-label="汴京一日，返回开场">
-      <span class="seal" aria-hidden="true">汴<br>京</span>
-      <span class="brand-name">汴京一日<small>北宋 · 城市漫游</small></span>
-    </a>
-    <nav aria-label="主导航">
-      <a class="nav-current" href="#city">城中漫游</a>
-      <a href="#route">沿河路线</a>
-    </nav>
-    <button class="sound" id="sound" type="button" aria-pressed="false">
-      <span class="wave-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-      <span id="sound-text">环境音<span class="optional"> · 关</span></span>
-    </button>
-  </header>
-
-  <main>
-    <section class="scene" id="city" aria-label="汴京漫游场景">
-      <div class="backdrop" aria-hidden="true">
-        <div class="layer showing" id="layer-a"></div>
-        <div class="layer" id="layer-b"></div>
-        <canvas id="atmosphere"></canvas>
-        <div class="light"></div>
+  <main id="experience" aria-label="清明上河图三维漫游">
+    <div id="viewport"><canvas id="world" tabindex="0" aria-label="三维汴京场景"></canvas></div>
+    <div class="vignette" aria-hidden="true"></div>
+    <div id="fade" aria-hidden="true"></div>
+    <header class="masthead">
+      <button class="brand" id="home" type="button" aria-label="汴京一日，返回开场">
+        <span class="seal" aria-hidden="true">汴<br>京</span>
+        <span class="brand-name">汴京一日<small>北宋 · 清明上河图</small></span>
+      </button>
+      <div class="top-actions">
+        <button class="glass sound" id="sound" type="button" aria-pressed="false" title="环境音">
+          <span class="sound-icon" aria-hidden="true"><i></i><i></i><i></i></span><span id="sound-label">环境音</span>
+        </button>
+        <button class="glass sun-badge" id="time-button" type="button" aria-expanded="false" aria-controls="day-panel">
+          <span class="sun" aria-hidden="true">☼</span><span id="period">巳时</span><i></i><time id="clock">10:24</time>
+        </button>
+        <button type="button" id="full" class="glass full" aria-label="全屏" title="全屏">⛶</button>
       </div>
-      <div class="scene-shade" aria-hidden="true"></div>
+    </header>
 
-      <div class="scene-top">
-        <button id="back" type="button" class="outline" hidden>← <span>返回开场</span></button>
-        <div class="sun-badge"><span class="sun" aria-hidden="true">☼</span><span id="period">巳时</span><span class="badge-divider"></span><time id="clock">10:24</time></div>
-      </div>
-
-      <div class="intro" id="intro">
-        <p class="era"><span></span>北宋 · 汴京</p>
-        <h1>清明上河图</h1>
-        <p class="subtitle">走进汴京的一日</p>
-        <p class="lead">沿汴河步入都城。看舟船穿过虹桥，沿街叫卖渐密，<br class="wide-only">再穿过城门，走进寻常人家的巷子。</p>
-        <div class="intro-actions">
-          <button class="primary" id="start" type="button">开始漫游 <span aria-hidden="true">→</span></button>
-          <a class="secondary" href="#route">查看路线 <span aria-hidden="true">↓</span></a>
-        </div>
-      </div>
-
-      <div class="pins" id="pins" aria-label="开场地点">
-        <button type="button" class="pin pin-river" data-scene="1"><span aria-hidden="true"></span>汴河</button>
-        <button type="button" class="pin pin-bridge" data-scene="3"><span aria-hidden="true"></span>虹桥</button>
-        <button type="button" class="pin pin-market" data-scene="4"><span aria-hidden="true"></span>街市</button>
-      </div>
-
-      <div class="walk-card" id="walk-card" hidden>
-        <p class="era"><span></span><span id="walk-region"></span></p>
-        <h2 id="walk-title" tabindex="-1"></h2>
-        <p id="walk-description"></p>
-        <button class="detail-button" id="detail-button" type="button" aria-expanded="false" aria-controls="detail">驻足细看 <span aria-hidden="true">+</span></button>
-        <aside class="detail" id="detail" hidden></aside>
-      </div>
-
-      <div class="scene-bottom">
-        <div class="location" id="opening-location"><span class="location-dot"></span><span>虹桥河畔</span></div>
-        <div class="walk-controls" id="walk-controls" hidden>
-          <button class="outline step" id="prev" aria-label="往回走" type="button">←</button>
-          <span class="position"><span id="scene-count">01 / 09</span><span class="progress-track"><i id="progress"></i></span></span>
-          <button class="outline step" id="next" aria-label="往前走" type="button">→</button>
-          <button class="outline tour" id="tour" aria-pressed="false" type="button">▷ <span>自动漫游</span></button>
-        </div>
-        <a class="scene-map" href="#route">沿河路线 <span aria-hidden="true">↓</span></a>
-        <span class="key-guide" id="key-guide" hidden>拖动环顾 <b>·</b> <kbd>W</kbd><kbd>S</kbd> 前后</span>
-        <button class="outline motion" id="motion" type="button" aria-label="暂停场景动态" title="暂停场景动态" aria-pressed="false">Ⅱ</button>
-      </div>
-    </section>
-
-    <section class="route" id="route" aria-labelledby="route-title">
-      <div class="container">
-        <div class="section-heading">
-          <div>
-            <p class="section-kicker"><span></span>汴河两岸</p>
-            <h2 id="route-title">沿河入城</h2>
-          </div>
-          <p class="route-instruction">从城外田埂走到城内坊巷。<br>选一个地点，即刻出发。</p>
-        </div>
-        <div class="route-map" aria-label="从郊野到城内的九处地点">
-          <div class="route-regions" aria-hidden="true"><span>城外</span><span>河岸</span><span>市井</span><span>城内</span></div>
-          <ol id="route-points"></ol>
-        </div>
-        <div class="places-heading">
-          <h3>沿途所见</h3>
-          <div class="gallery-buttons">
-            <button type="button" id="gallery-prev" aria-label="查看前面的地点">←</button>
-            <button type="button" id="gallery-next" aria-label="查看后面的地点">→</button>
-          </div>
-        </div>
-        <div class="places" id="places" aria-label="地点图集" tabindex="0"></div>
-      </div>
-    </section>
-  </main>
-
-  <footer>
-    <div class="container footer-inner">
-      <span>汴京一日</span>
-      <p>取意于《清明上河图》的原创场景与声音。</p>
-      <a href="#top">回到顶部 ↑</a>
+    <div class="day-panel glass" id="day-panel" hidden>
+      <label for="time-range">白昼时辰</label>
+      <input id="time-range" type="range" min="8" max="16.75" step=".0166666667" value="10.4">
+      <div><span>08:00</span><span>16:45</span></div>
     </div>
-  </footer>
+
+    <section class="intro" id="intro" aria-labelledby="title">
+      <p class="eyebrow"><span></span>北宋 · 汴京</p>
+      <h1 id="title">清明上河图</h1>
+      <p class="subtitle">沿汴河入城</p>
+      <p class="lead">船过虹桥，脚夫在码头接货。走过桥头的市集，<br>穿进城门，听街声渐远。</p>
+      <div class="intro-actions">
+        <button type="button" class="primary" id="start" disabled>入城步行 <span aria-hidden="true">→</span></button>
+        <button type="button" class="ghost" id="intro-tour" disabled>▷ 自动漫游</button>
+      </div>
+      <p id="load-status" role="status">正在准备汴京实景…</p>
+    </section>
+
+    <div id="labels" aria-label="场景地点"></div>
+    <section class="walk-hud" id="walk-hud" hidden aria-label="当前位置">
+      <p class="eyebrow"><span></span><span id="place-area"></span></p>
+      <h2 id="place-name" aria-live="polite"></h2>
+      <p id="place-note"></p>
+      <p id="tour-status" hidden>自动漫游中</p>
+    </section>
+    <div class="aim" id="aim" hidden aria-hidden="true"></div>
+
+    <div class="map-panel glass" id="map-panel" role="dialog" aria-modal="true" aria-labelledby="map-title" hidden>
+      <div class="map-heading">
+        <div><h2 id="map-title">汴京水陆图</h2><p>选择地点，沿河寻路。</p></div>
+        <button type="button" class="control" id="close-map" aria-label="关闭地图">×</button>
+      </div>
+      <div class="map-view" id="map-view">
+        <canvas id="map" aria-hidden="true"></canvas>
+        <div id="map-pins"></div>
+      </div>
+      <ol class="map-list" id="map-list"></ol>
+    </div>
+
+    <div class="joystick" id="joystick" hidden role="group" aria-label="触屏行走控制">
+      <div class="stick" id="stick" aria-hidden="true"></div>
+    </div>
+
+    <div class="controls">
+      <div class="foot-actions">
+        <button type="button" id="view" class="glass control" title="换个视角">⊙ <span>观景</span></button>
+        <button type="button" id="map-button" class="glass control" aria-controls="map-panel" aria-expanded="false">⌖ <span>地图</span></button>
+        <button type="button" id="take-control" class="glass control" hidden>⌑ <span>鼠标视角</span></button>
+        <button type="button" id="tour" class="glass control" aria-pressed="false" hidden><span>▷ 自动漫游</span></button>
+        <span class="look-help" id="look-help" hidden>拖动环顾 <b>·</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 行走</span>
+      </div>
+      <div class="wind-row">
+        <span id="heading-text">北 <b>↑</b></span>
+        <button type="button" id="pause" class="glass control icon" aria-label="暂停城中动态" aria-pressed="false" title="暂停城中动态">Ⅱ</button>
+      </div>
+    </div>
+    <nav class="route-bar" aria-label="沿河路线"><ol id="route"></ol></nav>
+    <noscript>开启浏览器的 JavaScript 后即可进入三维汴京。</noscript>
+  </main>
 </body>
 </html>

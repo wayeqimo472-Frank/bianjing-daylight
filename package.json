@@ -1,0 +1,10 @@
+{
+  "name": "bianjing-daylight",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --minify --format=iife --legal-comments=linked --outfile=dist/city3d.js"
+  },
+  "dependencies": {"three": "0.180.0"},
+  "devDependencies": {"esbuild": "0.25.12"}
+}
