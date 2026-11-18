@@ -8,6 +8,7 @@ const cylinder = new T.CylinderGeometry(1, 1, 1, 9);
 const foot = new T.CylinderGeometry(.7, 1, 1, 10);
 const eaveTile = new T.CylinderGeometry(1, 1, 1, 7);
 const rock = new T.DodecahedronGeometry(1, 0);
+const pennant = new T.OctahedronGeometry(1);
 
 function material(map, options = {}) {
   return new T.MeshStandardMaterial({ map, roughness: .91, ...options });
@@ -71,6 +72,9 @@ export function createWorld(scene, textures, wind) {
   const decks = [];
   const trades = [];
   const gatePosts = [];
+  const gateStairs = [];
+  const towerObstacles = [];
+  let gateTerrace;
   const signs = new Map();
   const object = new T.Object3D();
   const variation = () => .80 + random() * .23;
@@ -119,6 +123,12 @@ export function createWorld(scene, textures, wind) {
     const k = f(a-w/2,0,b-d/2);
     const l = f(a+w/2,0,b+d/2);
     barrier((k.x+l.x)/2, (k.z+l.z)/2, Math.abs(k.x-l.x), Math.abs(k.z-l.z));
+  }
+
+  function towerBarrier(f,a,b,w,d) {
+    const p=f(a-w/2,0,b-d/2);
+    const q=f(a+w/2,0,b+d/2);
+    towerObstacles.push({x0:Math.min(p.x,q.x),x1:Math.max(p.x,q.x),z0:Math.min(p.z,q.z),z1:Math.max(p.z,q.z)});
   }
 
   function trade(f, yaw, offset, sellerDepth, buyerDepth, entryDepth, goods) {
@@ -556,11 +566,144 @@ export function createWorld(scene, textures, wind) {
     }
     sign(local(bridgeX,0,center,Math.PI/2),Math.PI/2,'虹橋',0,arch(center)-.34,5.38,1.6,.43);
   }
+  function towerMap(f,theta,floor) {
+    const paper=document.createElement('canvas');
+    paper.width=768;paper.height=440;
+    const pen=paper.getContext('2d');
+    pen.fillStyle='#d6bb83';pen.fillRect(0,0,768,440);
+    pen.strokeStyle='#9e7c4b';pen.lineWidth=3;pen.strokeRect(17,16,734,408);
+    const px=x=>46+(x+135)*2.05;
+    const py=z=>211+z*2.45;
+    pen.beginPath();
+    for(let x=-134;x<=187;x+=3)pen.lineTo(px(x),py(riverCenter(x)-riverHalf(x)));
+    for(let x=187;x>=-134;x-=3)pen.lineTo(px(x),py(riverCenter(x)+riverHalf(x)));
+    pen.closePath();pen.fillStyle='#798c79';pen.fill();pen.strokeStyle='#596958';pen.stroke();
+    pen.strokeStyle='#9d6644';pen.lineWidth=5;
+    pen.beginPath();pen.moveTo(px(-121),py(25));pen.lineTo(px(-4),py(22));
+    pen.lineTo(px(-4),py(-23));pen.lineTo(px(163),py(-25));pen.stroke();
+    pen.lineWidth=8;pen.strokeStyle='#63513a';
+    pen.beginPath();pen.moveTo(px(106.7),py(-68));pen.lineTo(px(106.7),py(-12));pen.stroke();
+    pen.fillStyle='#786247';
+    for(let i=0;i<20;i++) {
+      const x=i*8+3;
+      pen.fillRect(px(x),py(-35-i%3),8,13);
+      if(i>12)pen.fillRect(px(x),py(-53+i%2*3),9,11);
+    }
+    pen.font='bold 25px SimSun, serif';pen.fillStyle='#59412c';
+    pen.fillText('汴京水陸圖',44,66);pen.fillText('城門',px(112),py(-10));
+    pen.fillText('虹橋',px(-27),py(-30));pen.fillText('汴河',px(-105),py(3));pen.fillText('北',690,60);
+    const map=new T.CanvasTexture(paper);
+    map.colorSpace=T.SRGBColorSpace;map.anisotropy=8;
+    const sheet=new T.Mesh(new T.PlaneGeometry(2.18,1.24),material(map,{side:T.DoubleSide}));
+    sheet.position.copy(f(0,floor+1.113,-.32));
+    sheet.rotation.set(-Math.PI/2,theta+Math.PI,0,'YXZ');
+    scene.add(sheet);
+    localBox(f,theta,'oldwood',0,floor+1.044,-.32,2.53,.127,1.52);
+    for(const a of [-1.07,1.07])for(const b of [-.91,.27]){
+      localBox(f,theta,'beam',a,floor+.50,b,.13,1.01,.13);
+    }
+    towerBarrier(f,0,-.32,2.53,1.52);
+  }
+
+  function towerRoom(f,theta,floor) {
+    const wall=(a,b,w,d)=>localBox(f,theta,'plaster',a,floor+1.36,b,w,2.72,d);
+    for(const a of [-5.83,5.83]){
+      wall(a,0,.21,5.58);
+      towerBarrier(f,a,0,.21,5.58);
+    }
+    for(const [a,w] of [[-4.72,2.18],[0,3.58],[4.72,2.18]]){
+      wall(a,-2.77,w,.23);
+      towerBarrier(f,a,-2.77,w,.23);
+    }
+    localBox(f,theta,'timber',0,floor+2.42,-2.77,11.6,.19,.29);
+    localBox(f,theta,'plaster',0,floor+.43,2.77,11.6,.86,.22);
+    localBox(f,theta,'oldwood',0,floor+.89,2.79,11.6,.12,.35);
+    towerBarrier(f,0,2.77,11.6,.25);
+    shutter(f,theta,-3.83,floor+1.53,2.84,1.15,1.15);
+    shutter(f,theta,3.83,floor+1.53,2.84,1.15,1.15);
+    for(const a of [-5.8,-3.87,-1.93,0,1.93,3.87,5.8]){
+      for(const b of [-2.86,2.86]){
+        localBox(f,theta,'lacquer',a,floor+1.51,b,.225,3.02,.25);
+        towerBarrier(f,a,b,.225,.25);
+      }
+      localBox(f,theta,'oldwood',a,floor+2.80,0,.19,.26,5.86);
+    }
+    for(const side of [-1,1]){
+      const near=side*2.91,ledge=side*4.45;
+      quad('tileDark',f(-6.65,floor+2.56,near),f(6.65,floor+2.56,near),
+        f(6.65,floor+2.22,ledge),f(-6.65,floor+2.22,ledge),[0,0,7,1.2]);
+      beam('beam',f(-6.65,floor+2.21,ledge),f(6.65,floor+2.21,ledge),.15,.17);
+      for(const a of [-4.8,-2.7,2.7,4.8]){
+        beam('timber',f(a,floor+2.02,near),f(a,floor+2.19,ledge),.087,.093);
+      }
+    }
+    roof(f,15.8,10.5,floor+3.115,2.65,'tileDark');
+    towerMap(f,theta,floor);
+    for(const a of [-4.83,4.83]){
+      localBox(f,theta,'beam',a,floor+.17,1.47,1.6,.33,.80);
+      localBox(f,theta,'oldwood',a,floor+1.15,1.73,1.60,.12,.29);
+      towerBarrier(f,a,1.49,1.61,.86);
+    }
+    for(let i=0;i<4;i++){
+      const a=-5.39+i*.33;
+      beam('oldwood',f(a,floor+.34,1.18),f(a,floor+1.94,1.65),.027,.027,cylinder);
+      const point=f(a,floor+2.03,1.68);
+      solid(pennant,'iron',point,V(.045,.15,.032),theta,1.14);
+    }
+    for(let i=0;i<3;i++){
+      const a=4.25+i*.49;
+      beam('beam',f(a,floor+.37,1.24),f(a,floor+1.22,1.61),.063,.050);
+      beam('iron',f(a,floor+1.22,1.61),f(a+.045,floor+1.83,1.80),.079,.027);
+      beam('timber',f(a-.13,floor+1.24,1.61),f(a+.13,floor+1.24,1.61),.040,.038);
+    }
+    for(const a of [-5.07,-4.46]){
+      let last=f(a+.19,floor+.42,2.13);
+      for(let i=1;i<=11;i++){
+        const t=i/11;
+        const tip=f(a+.19*Math.cos(t*2*Math.PI),floor+.42+t*1.21,2.13+.031*Math.sin(t*Math.PI));
+        beam('oldwood',last,tip,.029,.024,cylinder);last=tip;
+      }
+    }
+    localBox(f,theta,'straw',4.93,floor+.34,-1.39,.63,.69,.53);
+    towerBarrier(f,4.93,-1.39,.63,.53);
+    gatePosts.push({position:f(-3.77,floor,-.96),yaw:theta+2.47});
+    gatePosts.push({position:f(3.81,floor,-.94),yaw:theta-2.47});
+  }
+
+  function towerStair(f,theta,a,floor) {
+    const top=-4.38,foot=-21.48,width=2.90,count=41;
+    const stride=(top-foot)/count;
+    const base=groundY(f(a,0,foot).x,f(a,0,foot).z);
+    const rise=(floor-base)/count;
+    for(let i=0;i<count;i++){
+      const b=foot+(i+.5)*stride;
+      const y=base+(i+1)*rise;
+      localBox(f,theta,'brick',a,(y-.21)/2,b,width,y+.21,stride+.009);
+      localBox(f,theta,'stone',a,y-.044,b,width+.026,.088,stride+.011);
+    }
+    for(const side of [-1,1]){
+      const edge=a+side*(width/2-.12);
+      beam('brick',f(edge,base+.24,foot),f(edge,floor+.24,top),.30,.48);
+      beam('stone',f(edge,base+.47,foot),f(edge,floor+.47,top),.34,.12);
+      const p=f(a+side*1.96,0,foot-.83);
+      p.y=groundY(p.x,p.z);
+      gatePosts.push({position:p,yaw:theta+Math.PI+side*.12});
+    }
+    const p=f(a-width/2,0,top),q=f(a+width/2,0,foot);
+    gateStairs.push({x0:p.x,x1:q.x,z0:p.z,z1:q.z,base,rise,count,step:stride});
+    const marker=foot-.39;
+    sign(f,theta,'登城',a+1.56,1.97,marker+.054,.48,.96,true);
+    sign(f,theta+Math.PI,'登城',a+1.56,1.97,marker-.054,.48,.96,true);
+    localBox(f,theta,'timber',a+1.56,1.19,marker,.085,2.39,.087);
+  }
+
   function gate() {
     const theta=-Math.PI/2;
     const x=106.7, z=-25;
     const f=local(x,0,z,theta);
     const height=8.75, depth=8.5, radius=3.98, spring=2.95;
+    const floor=height+.185;
+    const stairSides=[-8.2,7.65];
     const opening = a => spring + Math.sqrt(Math.max(0,radius*radius-a*a));
     const top=height-.11;
     for(const [a,b] of [[-49,-radius],[radius,13.6]]) {
@@ -569,7 +712,11 @@ export function createWorld(scene, textures, wind) {
       localBox(f,theta,'brick',(a+b)/2,top,0,b-a,.29,depth+.38);
       localBarrier(f,(a+b)/2,0,b-a,depth);
       for(let p=a+.30;p<b-.25;p+=1.25) {
-        for(const side of [-1,1]) localBox(f,theta,'brick',p,height+.32,side*(depth/2-.18),.72,.77,.42);
+        for(const side of [-1,1]) {
+          if(side===-1&&stairSides.some(a=>Math.abs(a-p)<1.81))continue;
+          localBox(f,theta,'brick',p,height+.43,side*(depth/2-.18),.72,.77,.42);
+          towerBarrier(f,p,side*(depth/2-.18),.72,.42);
+        }
       }
       for(let p=a+.4;p<b-.35;p+=3.45) {
         for(const side of [-1,1]) localBox(f,theta,'stone',p,2.15,side*depth/2,.22,2.6,.17,.82);
@@ -598,18 +745,24 @@ export function createWorld(scene, textures, wind) {
     for(const side of [-1,1]){
       for(let j=0;j<5;j++) localBox(f,theta,'stone',side*(radius+.32),j*.57+.30,deep+.10,.64,.55,.24);
     }
-    localBox(f,theta,'stone',0,height+.03,0,14.5,.31,9.4);
-    localBox(f,theta,'plaster',0,height+1.6,0,11.8,3.11,5.6);
-    for (const a of [-5.8,-3.87,-1.93,0,1.93,3.87,5.8]) {
-      for(const zf of [-2.86,2.86]) localBox(f,theta,'lacquer',a,height+1.66,zf,.25,3.2,.29);
-      if(Math.abs(a)<5.7) shutter(f,theta,a,height+1.70,2.92,1.08,1.29);
+    localBox(f,theta,'stone',0,height+.075,0,24.1,.22,8.90);
+    gateTerrace={x0:x-4.45,x1:x+4.45,z0:z-12.05,z1:z+12.05,floor};
+    for(const a of [-11.9,11.9]){
+      localBox(f,theta,'brick',a,floor+.43,0,.29,.89,8.86);
+      towerBarrier(f,a,0,.29,8.86);
     }
-    roof(f,15.8,10.5,height+3.30,2.65,'tileDark');
-    roof(f,13.3,8.9,height+1.10,.95,'tile');
+    for(const [a,w] of [[-10.98,1.87],[-.275,12.45],[10.69,2.61]]){
+      localBox(f,theta,'brick',a,floor+.28,-4.05,w,.56,.38);
+      towerBarrier(f,a,-4.05,w,.38);
+    }
+    localBox(f,theta,'brick',0,floor+.23,4.04,24.0,.46,.39);
+    towerBarrier(f,0,4.04,24.0,.39);
+    towerRoom(f,theta,floor);
+    for(const a of stairSides)towerStair(f,theta,a,floor);
     sign(f,theta,'汴京',0,7.86,deep+.13,1.95,.54);
     for(const side of [-1,1]){
-      gatePosts.push({position:f(side*7.75,height,deep-.60),yaw:theta-side*.14});
-      gatePosts.push({position:f(side*7.75,height,-deep+.60),yaw:theta+Math.PI+side*.09});
+      gatePosts.push({position:f(side*7.75,floor,deep-.60),yaw:theta-side*.14});
+      gatePosts.push({position:f(side*9.65,floor,-deep+.93),yaw:theta+Math.PI+side*.09});
       const post=f(side*4.90,0,deep+.94);
       post.y=groundY(post.x,post.z);
       gatePosts.push({position:post,yaw:theta-side*.25});
@@ -762,13 +915,13 @@ export function createWorld(scene, textures, wind) {
     [3,-18.7,Math.PI,3.8,'pot'],[20,-19.2,Math.PI,4,'fruit'],[25.6,-20.1,Math.PI,3.4,'fruit'],
     [38.6,-19.4,Math.PI,4.4,'cloth'],[45,-20.4,Math.PI,3.9,'pot'],
     [53.9,-19.7,Math.PI,4.2,'fruit'],[73.5,-20.0,Math.PI,3.7,'pot'],
-    [89.1,-19.9,Math.PI,3.2,'cloth'],[123,-18.9,Math.PI,4.2,'pot'],[136,-20.1,Math.PI,4.0,'fruit'],
+    [89.1,-19.9,Math.PI,3.2,'cloth'],[151,-19.4,Math.PI,4.2,'pot'],[136,-20.1,Math.PI,4.0,'fruit'],
     [31.1,-27.6,0,2.3,'bread'],[42,-27.5,0,2.2,'fruit'],[53.3,-28.1,0,2.0,'cloth']
   ]) stall(x,z,r,w,k);
 
   gate();
   for(const [x,z,w,d,kind,label] of [
-    [116.2,-34.8,6.8,8.4,'store','食店'],[122,-36,5.0,7.4,'home'],
+    [116.2,-40.3,6.8,8.4,'store','食店'],[122,-41.8,5.0,7.4,'home'],
     [136.8,-34.7,7.1,8.7,'home'],[149.9,-34.8,7.6,8.0,'store','布'],
     [160.4,-35.0,8.5,8.5,'home'],[172,-34.3,10.0,8.0,'home'],
     [119.9,-50.8,9.0,7.1,'home'],[137.3,-51.4,9.0,7.5,'home'],
@@ -807,7 +960,7 @@ export function createWorld(scene, textures, wind) {
     [-56,24,1.0,1],[-42,20.6,.96,1],[-22,18.3,.96,1],[-10,27,1.22,1],[10,20.4,.99,1],[28,29.0,.82,1],
     [48,20.2,1.04,1],[59,19.9,1.25,1],[70,26,1.00,1],
     [-39,-22,1.11,1],[-16,-24,1.12,1],[7,-15.5,.86,1],[34,-28.8,.93,0],
-    [55,-15.5,1.01,1],[76,-15.8,.85,1],[93,-15.1,1.12,1],[112,-17.2,.91,1],
+    [55,-15.5,1.01,1],[76,-15.8,.85,1],[93,-15.1,1.12,1],[112,-14.2,.91,1],
     [126,-53,1.12,0],[132,-48,.99,1],[128,-66,1.02,1],[137,-41,.83,0]
   ]) tree(x,z,s,kind===1);
   for (let i=0;i<74;i++){
@@ -878,16 +1031,31 @@ export function createWorld(scene, textures, wind) {
     scene.add(mesh);
   }
 
-  function walkHeight(x,z) {
+  const inRect=(region,x,z,inset=0)=>x>=region.x0+inset&&x<=region.x1-inset&&z>=region.z0+inset&&z<=region.z1-inset;
+  const staircase=(x,z)=>gateStairs.find(stair=>inRect(stair,x,z));
+  function onGateTerrace(x,z,elevation) {
+    return elevation>=gateTerrace.floor-.65&&inRect(gateTerrace,x,z);
+  }
+  function walkHeight(x,z,elevation=0) {
     if (x<bounds.west||x>bounds.east||z<bounds.north||z>bounds.south) return null;
+    if(onGateTerrace(x,z,elevation))return gateTerrace.floor;
+    const stair=staircase(x,z);
+    if(stair){
+      const tread=Math.min(stair.count,1+Math.floor((stair.x1-x)/stair.step));
+      return stair.base+tread*stair.rise;
+    }
     if (Math.abs(x-bridgeX)<bridgeWidth/2-.14 && Math.abs(z-riverCenter(bridgeX))<=bridgeSpan+.04) return arch(z);
     if (Math.abs(x-gangwayX)<.78 && z>=gangwayFrom && z<=gangwayTo)return gangwayHeight(z);
     for(const deck of decks) if(x>=deck.x0&&x<=deck.x1&&z>=deck.z0&&z<=deck.z1)return deck.y;
     if(Math.abs(z-riverCenter(x))<riverHalf(x)-.14)return null;
     return groundY(x,z);
   }
-  function isObstacle(x,z,margin=.30){
-    return obstacles.some(o=>x>o.x0-margin&&x<o.x1+margin&&z>o.z0-margin&&z<o.z1+margin);
+  function isObstacle(x,z,margin=.30,elevation=0){
+    const stair=staircase(x,z);
+    if(stair&&(z<stair.z0+.22+margin||z>stair.z1-.22-margin))return true;
+    const meetsTerrace=stair&&elevation>=gateTerrace.floor-.65;
+    const walls=(meetsTerrace||onGateTerrace(x,z,elevation))?towerObstacles:obstacles;
+    return walls.some(o=>x>o.x0-margin&&x<o.x1+margin&&z>o.z0-margin&&z<o.z1+margin);
   }
-  return { materials, walkHeight, isObstacle, obstacles, trades, gatePosts };
+  return { materials, walkHeight, isObstacle, obstacles, trades, gatePosts, gateTerrace, gateStairs, onGateTerrace };
 }

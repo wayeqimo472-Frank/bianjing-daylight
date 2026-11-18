@@ -58,6 +58,8 @@ async function launch() {
   let markerX,markerZ;
   const routeButtons=[];
   const mapButtons=[];
+  const towerPlace={area:'城墙步道',name:'城门楼',note:'扶墙可望见街市与汴河。门楼从内廊进入，案上铺着汴京水陆图。'};
+  let displayedPlace;
   const miniMap={ west:-155,east:174,north:-68,south:55 };
   const mapX=x=>(x-miniMap.west)/(miniMap.east-miniMap.west);
   const mapY=z=>(z-miniMap.north)/(miniMap.south-miniMap.north);
@@ -145,15 +147,17 @@ async function launch() {
     }
   }
 
+  function showPlace(place){
+    if(!place||displayedPlace===place)return;
+    displayedPlace=place;
+    byId('place-area').textContent=place.area;
+    byId('place-name').textContent=place.name;
+    byId('place-note').textContent=place.note;
+  }
   function setIndex(i, scroll=false){
     if(index===i)return;
     index=i;
-    const place=stops[i];
-    if(place){
-      byId('place-area').textContent=place.area;
-      byId('place-name').textContent=place.name;
-      byId('place-note').textContent=place.note;
-    }
+    showPlace(stops[i]);
     routeButtons.forEach((b,k)=>{
       const current=k===i;
       for(const button of [b,...mapButtons[k]]){
@@ -242,16 +246,19 @@ async function launch() {
     updateHUD();
   }
 
-  function walk(dx,dz) {
+  function walk(dx,dz,dt=.05) {
     let moved=false;
+    const elevation=player.y-1.61;
     for(const [x,z] of [[player.x+dx,player.z+dz],[player.x+dx,player.z],[player.x,player.z+dz]]){
       if(Math.abs(x-player.x)+Math.abs(z-player.z)<.0001)continue;
-      const floor=world.walkHeight(x,z);
-      if(floor===null||world.isObstacle(x,z)||Math.abs(floor-player.y+1.61)>.73)continue;
+      const floor=world.walkHeight(x,z,elevation);
+      if(floor===null||world.isObstacle(x,z,.30,elevation)||Math.abs(floor-elevation)>.73)continue;
       player.x=x;player.z=z;
       moved=true;
       break;
     }
+    const floor=world.walkHeight(player.x,player.z,elevation)??0;
+    player.y=T.MathUtils.lerp(player.y,floor+1.61,1-Math.exp(-dt*17));
     return moved;
   }
   function nearby() {
@@ -270,13 +277,12 @@ async function launch() {
     const magnitude=Math.max(Math.hypot(forward,side),1);
     const speed=(keys.has('shift')?6.5:3.3)*dt/magnitude;
     const moving=walk((Math.cos(yaw)*side-Math.sin(yaw)*forward)*speed,
-      (-Math.sin(yaw)*side-Math.cos(yaw)*forward)*speed);
-    const floor=world.walkHeight(player.x,player.z)??0;
-    player.y=T.MathUtils.lerp(player.y,floor+1.61,1-Math.exp(-dt*17));
+      (-Math.sin(yaw)*side-Math.cos(yaw)*forward)*speed,dt);
     camera.position.copy(player);
     if(moving&&!reduced.matches)camera.position.y+=Math.sin(performance.now()*.011)*.035;
     camera.rotation.set(pitch,yaw,0,'YXZ');
     nearby();
+    showPlace(world.onGateTerrace(player.x,player.z,player.y-1.61)?towerPlace:stops[index]);
     return moving;
   }
 
@@ -351,6 +357,14 @@ async function launch() {
       if(o.x1-o.x0<2.2||o.z1-o.z0<2.2)continue;
       m.fillStyle=o.x0>101&&o.x1<112?'#836f58':'#a49875';
       m.fillRect(mx(o.x0),my(o.z0),mx(o.x1)-mx(o.x0),my(o.z1)-my(o.z0));
+    }
+    for(const stair of world.gateStairs){
+      m.fillStyle='#a48b63';
+      m.fillRect(mx(stair.x0),my(stair.z0),mx(stair.x1)-mx(stair.x0),my(stair.z1)-my(stair.z0));
+      m.strokeStyle='#65563e';m.lineWidth=1;
+      for(let x=stair.x0+2;x<stair.x1;x+=3){
+        m.beginPath();m.moveTo(mx(x),my(stair.z0));m.lineTo(mx(x),my(stair.z1));m.stroke();
+      }
     }
     m.beginPath();
     for(const [x,z] of route)m.lineTo(mx(x),my(z));
@@ -558,7 +572,8 @@ async function launch() {
     window.cityTest={
       camera,world,life,pathProblems,stops,renderer,get mode(){return mode;},
       get player(){return player.toArray();}, get time(){return time;},get index(){return index;},
-      enter,walk,advanceTour(seconds){while(mode==='tour'&&seconds>0){updateTour(.05);seconds-=.05;}}
+      enter,walk,aimAt(x,y,z){[yaw,pitch]=turnToward(x,y,z);},
+      advanceTour(seconds){while(mode==='tour'&&seconds>0){updateTour(.05);seconds-=.05;}}
     };
   }
   frameHandle=requestAnimationFrame(animate);
