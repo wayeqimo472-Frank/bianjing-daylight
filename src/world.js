@@ -69,6 +69,7 @@ export function createWorld(scene, textures, wind) {
   const surfaces = new Map();
   const obstacles = [];
   const decks = [];
+  const trades = [];
   const signs = new Map();
   const object = new T.Object3D();
   const variation = () => .80 + random() * .23;
@@ -117,6 +118,11 @@ export function createWorld(scene, textures, wind) {
     const k = f(a-w/2,0,b-d/2);
     const l = f(a+w/2,0,b+d/2);
     barrier((k.x+l.x)/2, (k.z+l.z)/2, Math.abs(k.x-l.x), Math.abs(k.z-l.z));
+  }
+
+  function trade(f, yaw, offset, sellerDepth, buyerDepth, entryDepth, goods) {
+    trades.push({ seller:f(offset,0,sellerDepth), buyer:f(offset,0,buyerDepth),
+      entry:f(offset+.69,0,entryDepth), yaw, goods });
   }
 
   function signTexture(text, upright) {
@@ -430,6 +436,7 @@ export function createWorld(scene, textures, wind) {
           else jug(jar.x,jar.y,jar.z,.43+random()*.70,k%3?'ceramic':'paleCeramic');
         }
         for (let k=0;k<6;k++) part(k%2?'linen':'sage',w*.28,.32+k*.16,front-.70,.99,.145,.64);
+        trade(f,theta,Math.min(w*.23,1.45),-1.73,.14,front-.46,kind==='market'?'fruit':'pot');
       }
       if (kind!=='tavern') awning(f,theta,w+.40,1.95,2.94,front);
       else {
@@ -447,8 +454,8 @@ export function createWorld(scene, textures, wind) {
     }
   }
 
-  function stall(x,z,theta,w,kind) {
-    const y=groundY(x,z), f=local(x,y,z,theta);
+  function stall(x,z,theta,w,kind,onBridge=false) {
+    const y=onBridge?arch(z):groundY(x,z), f=local(x,y,z,theta);
     const base=(m,a,b,c,W,H,D)=>localBox(f,theta,m,a,b,c,W,H,D);
     base('timber',0,.83,0,w,.12,1.06);
     for(const side of [-1,1]) {
@@ -469,8 +476,14 @@ export function createWorld(scene, textures, wind) {
       } else if(kind==='cloth') {
         const roll=f((i/(span-1)-.5)*w*.82,.97,.06);
         box(['linen','sage','rust'][i%3],roll.x,roll.y,roll.z,.29,.16,.63,theta);
+      } else if(kind==='bread') {
+        solid(foot,'straw',item.clone(),V(.19,.07,.16),theta);
+        solid(foot,'oldwood',item.clone().add(V(.033,.074,.016)),V(.139,.067,.124),theta,1.15);
       } else jug(item.x,item.y,item.z,.46+random()*.44,i%2?'ceramic':'paleCeramic');
     }
+    const label={fruit:'果子',cloth:'布帛',pot:'茶水',bread:'胡餅'}[kind];
+    if(onBridge || kind==='bread')sign(f,theta,label,-w*.30,1.54,.02,.45,.85,true);
+    trade(f,theta,0,-.91,.84,onBridge?1.58:1.94,kind);
     localBarrier(f,0,0,w,1.08);
   }
 
@@ -710,6 +723,9 @@ export function createWorld(scene, textures, wind) {
   wharf(15,16.2,12.6,5.35);
   wharf(47,-13.2,13.5,4.5);
   bridge();
+  for(const [side,z,kind] of [[1,-7.2,'bread'],[-1,-10.3,'fruit'],[1,8.7,'pot'],[-1,12.7,'cloth']]) {
+    stall(bridgeX+side*3.91,z,-side*Math.PI/2,1.68,kind,true);
+  }
   for(let i=0;i<390;i++){
     const x=-151+random()*319, nearNorth=i%4!==0;
     const z=nearNorth?-24+(random()>.5?1:-1)*(2.6+random()*.95):23+(random()>.5?1:-1)*(1.4+random()*1.0);
@@ -738,7 +754,8 @@ export function createWorld(scene, textures, wind) {
     [3,-18.7,Math.PI,3.8,'pot'],[20,-19.2,Math.PI,4,'fruit'],[25.6,-20.1,Math.PI,3.4,'fruit'],
     [38.6,-19.4,Math.PI,4.4,'cloth'],[45,-20.4,Math.PI,3.9,'pot'],
     [53.9,-19.7,Math.PI,4.2,'fruit'],[73.5,-20.0,Math.PI,3.7,'pot'],
-    [89.1,-19.9,Math.PI,3.2,'cloth'],[123,-18.9,Math.PI,4.2,'pot'],[136,-20.1,Math.PI,4.0,'fruit']
+    [89.1,-19.9,Math.PI,3.2,'cloth'],[123,-18.9,Math.PI,4.2,'pot'],[136,-20.1,Math.PI,4.0,'fruit'],
+    [31.1,-27.6,0,2.3,'bread'],[42,-27.5,0,2.2,'fruit'],[53.3,-28.1,0,2.0,'cloth']
   ]) stall(x,z,r,w,k);
 
   gate();
@@ -864,5 +881,5 @@ export function createWorld(scene, textures, wind) {
   function isObstacle(x,z,margin=.30){
     return obstacles.some(o=>x>o.x0-margin&&x<o.x1+margin&&z>o.z0-margin&&z<o.z1+margin);
   }
-  return { materials, walkHeight, isObstacle, obstacles };
+  return { materials, walkHeight, isObstacle, obstacles, trades };
 }

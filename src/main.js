@@ -47,6 +47,7 @@ async function launch() {
   const thumb={id:null,x:0,y:0};
   const player=V(0,0,0);
   const lookRay=V(0,0,0);
+  const lastLifeView=V(0,0,0);
   const mapView=byId('map-view');
   const map=byId('map');
   const m=map.getContext('2d');
@@ -411,9 +412,10 @@ async function launch() {
     if(mode==='scenic')vista();
     else if(mode==='tour')moving=updateTour(dt);
     else if(byId('map-panel').hidden)moving=animateWalking(dt);
-    if(!paused||frame===1){
+    if(!paused||frame===1||lastLifeView.distanceToSquared(camera.position)>100){
       wind.value=time;
-      life.update(time);
+      life.update(time,camera.position);
+      lastLifeView.copy(camera.position);
     }
     environment.update(time,dayHours,camera,frame);
     renderer.render(scene,camera);

@@ -226,11 +226,11 @@ function sample(route,distance){
     Math.atan2(seg.b[0]-seg.a[0],seg.b[1]-seg.a[1])];
 }
 
-function createWalkers(scene,world,mats,random,isMobile) {
+function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
   const paths=circuits.map(makeRoute);
   const walkers=[];
   const populations=isMobile?[6,8,13,17,7,7,7]:[10,12,24,29,9,12,11];
-  const robe= [0x9f9273,0xbba984,0x8b826b,0x7b856a,0xb5a485,0xa8816e,0x6d8180,0xa68e73,0x8e817f,0xbea87f,0x747d65];
+  const robe= [0x9f9273,0xbba984,0x837466,0x718568,0xc8a97e,0xad6f60,0x647f86,0xb69981,0x937e83,0xbd935d,0x647d63];
   const skin= [0xb88c69,0xb68a69,0xc59d7b,0xaf8462,0xca9c7e];
   const matsWalk = new Map();
   function pool(key, geometry, material) {
@@ -278,17 +278,36 @@ function createWalkers(scene,world,mats,random,isMobile) {
     walkers.push({route:delivery,started:delivery.length*(.19+r*.49),speed:.70,walking:true,delivery:true,
       style:r,scale:.94+r*.044,shade:new T.Color(robe[1+r*3]),faces:new T.Color(skin[r]),payload:0,phase:r*3.2});
   }
-  const stationary = [[-126,23.3],[-36,14.2],[-30,19.2],[19.9,-21.1],[26.3,-21.5],[38,-20.9],[47.6,-33.6],
-    [50.5,-31.6],[65.2,-35.12],[72.5,-35.22],[66.1,-38.77],[60,-23.2],[97,-22.4],[113,-22.3],[130.4,-48],[125,-42.5],[10.3,25.1]];
+  const stationary = [[-126,23.3],[-36,14.2],[-30,19.2],[60,-23.2],[97,-22.4],[113,-22.3],[130.4,-48],
+    [125,-42.5],[65.2,-35.12],[72.5,-35.22],[66.1,-38.77],[10.3,25.1]];
   for(let i=0;i<stationary.length;i++){
     const [x,z]=stationary[i];
     walkers.push({x,z,walking:false,seated:i>=8&&i<=10,style:i%3,scale:.86+random()*.17,shade:new T.Color(robe[i%robe.length]),
       faces:new T.Color(skin[i%skin.length]),p:3,payload:i%4===0?1:0,phase:random()*TAU});
   }
-  const groups=walkers.length+16;
+  for(const [i,stand] of world.trades.entries()){
+    const cycle=20+(i%5)*2.2;
+    const offset=(i*.38197+.33)%1;
+    for(const buyer of [false,true]){
+      walkers.push({ stand,buyer,cycle,offset,style:(i+Number(buyer))%3,scale:.91+random()*.12,
+        shade:new T.Color(robe[(i*3+Number(buyer)*5)%robe.length]),faces:new T.Color(skin[i%skin.length]),
+        payload:0,phase:random()*TAU,speed:1 });
+    }
+  }
+  for(const [i,boat] of boats.entries()){
+    walkers.push({boat,x:0,z:0,walking:false,style:i%3,scale:.93,shade:new T.Color(robe[i]),
+      faces:new T.Color(skin[i%skin.length]),payload:0,phase:random()*TAU});
+  }
+  for(const cart of carts)walkers.push({cart,walking:true,style:0,scale:.96,speed:1.05,shade:new T.Color(robe[3+cart.index]),
+    faces:new T.Color(skin[cart.index]),payload:0,phase:random()*TAU});
+  for(const [i,mount] of mounts.entries()){
+    walkers.push({mount,seated:true,style:0,scale:.98,shade:new T.Color(robe[5+i]),faces:new T.Color(skin[i]),
+      payload:0,phase:i*.9,speed:0});
+  }
+  const groups=walkers.length;
   for(const [key,slot] of matsWalk){
     const copies=['hand','arms','calves','feet','collar','basket','rope','ears','eyes'].includes(key)?2:1;
-    const model=new T.InstancedMesh(slot.geometry,slot.material,groups*copies);
+    const model=new T.InstancedMesh(slot.geometry,slot.material,groups*copies+(key==='calves'?mounts.length*2:0));
     model.instanceMatrix.setUsage(T.DynamicDrawUsage);
     model.castShadow=!['nose','collar','rope'].includes(key);
     model.receiveShadow=true;
@@ -329,10 +348,37 @@ function createWalkers(scene,world,mats,random,isMobile) {
   const pale=new T.Color(0xe4d8bb);
   const black=new T.Color(0x938678);
   const grain=new T.Color(0xbfa57d);
-  function update(time) {
+  const goodsColors={pot:new T.Color(0xb9c1a6),bread:new T.Color(0xe4bd83),
+    cloth:new T.Color(0xcc9385),fruit:new T.Color(0xb5a866)};
+  const tradeDistanceSquared=(isMobile?60:86)**2;
+  function update(time,view) {
     for(const slot of matsWalk.values()) slot.used=0;
     for(person of walkers){
-      if(person.cart){
+      if(person.stand&&view&&person.stand.seller.distanceToSquared(view)>tradeDistanceSquared)continue;
+      let moving=person.walking, gesture=0, offered=false;
+      if(person.mount){
+        const horse=person.mount.root;
+        x=horse.position.x;z=horse.position.z;yaw=horse.rotation.y;
+      }else if(person.stand){
+        const { stand,buyer,cycle,offset }=person;
+        const phase=(time/cycle+offset)%1;
+        const arrives=T.MathUtils.smoothstep(phase,.03,.26);
+        const leaves=T.MathUtils.smoothstep(phase,.73,.96);
+        const reach=T.MathUtils.smoothstep(phase,.34,.46)*(1-T.MathUtils.smoothstep(phase,.63,.73));
+        gesture=reach;
+        offered=buyer?phase>.55&&phase<.98:phase>=.30&&phase<=.55;
+        if(buyer){
+          const atCounter=arrives-leaves;
+          x=T.MathUtils.lerp(stand.entry.x,stand.buyer.x,atCounter);
+          z=T.MathUtils.lerp(stand.entry.z,stand.buyer.z,atCounter);
+          const departing=phase>.73&&phase<.96;
+          moving=phase>.03&&phase<.26||departing;
+          yaw=stand.yaw+(departing?0:Math.PI)+.13*Math.sin(time*1.15+person.phase);
+        }else{
+          ({x,z}=stand.seller);
+          yaw=stand.yaw+.14*Math.sin(time*.77+person.phase);
+        }
+      }else if(person.cart){
         const cart=person.cart.root; yaw=cart.rotation.y;
         x=cart.position.x-Math.sin(yaw)*1.93;z=cart.position.z-Math.cos(yaw)*1.93;
       }else if(person.walking) {
@@ -341,6 +387,18 @@ function createWalkers(scene,world,mats,random,isMobile) {
         if(person.delivery)person.payload=(person.started+time*person.speed)%person.route.length<person.route.length*.50?1:0;
         x+=Math.cos(yaw)*offset;
         z-=Math.sin(yaw)*offset;
+        if(person.p===0||person.p===3){
+          for(const {root} of mounts){
+            const dx=x-root.position.x,dz=z-root.position.z;
+            if(Math.abs(dx)>4.5||Math.abs(dz)>4.5)continue;
+            const rightX=Math.cos(root.rotation.y),rightZ=-Math.sin(root.rotation.y);
+            const side=dx*rightX+dz*rightZ, ahead=-dx*rightZ+dz*rightX;
+            const space=(1-T.MathUtils.smoothstep(Math.abs(ahead),1.2,4.2))
+              *(1-T.MathUtils.smoothstep(Math.abs(side),.25,1.13))*.82*(side>=0?1:-1);
+            const nx=x+rightX*space,nz=z+rightZ*space;
+            if(world.walkHeight(nx,nz)!==null&&!world.isObstacle(nx,nz,.15)){x=nx;z=nz;}
+          }
+        }
       } else {
         ({x,z}=person);
         yaw = (person.seated?Math.PI:person.phase) + .15*Math.sin(time*.64+person.phase);
@@ -353,11 +411,12 @@ function createWalkers(scene,world,mats,random,isMobile) {
         y=boat.position.y+.82;
         yaw=person.boat.route>0?Math.PI/2:-Math.PI/2;
       }
+      if(person.mount)y=person.mount.root.position.y+1.06+person.mount.bob;
       c=Math.cos(yaw);s=Math.sin(yaw);
-      const moving=person.walking;
       const progress=time*(4.1+person.speed*.97)+person.phase;
       const stride=moving?Math.sin(progress):0;
-      const upper=person.seated?-.43+.012*Math.sin(time*2.4+person.phase):moving?.026*Math.cos(progress*2):.012*Math.sin(time*2.4+person.phase);
+      const upper=person.seated?-.43+.012*Math.sin(time*2.4+person.phase):moving?.026*Math.cos(progress*2)
+        :.012*Math.sin(time*2.4+person.phase)-gesture*(person.buyer?.065:.025);
       const [robeColor,faceColor]=[person.shade,person.faces];
       const skirtLength=person.seated?.38:person.style===1?.79:.63;
       place('hem',0,.96-skirtLength/2+upper,0,person.style===1?.263:.218,skirtLength,.177,robeColor);
@@ -375,12 +434,20 @@ function createWalkers(scene,world,mats,random,isMobile) {
       for(const side of [-1,1]){
         const legMotion=stride*side;
         const heel=.067+Math.max(0,-legMotion)*.095;
-        segment('calves',[side*.081,.58,-legMotion*.016],[side*.079,heel+.055,legMotion*.16],.067,robeColor);
-        place('feet',side*.079,heel,legMotion*.16+.035,.075,.058,.117,black);
-        const forearm=person.seated?[side*.14,.51+.021*Math.sin(time+person.phase),.31]:person.cart?[side*.22,.68+upper,.27]:person.payload===2 && side===1 ? [side*.17,1.43+upper,.12] :
+        if(person.mount){
+          segment('calves',[side*.14,.53,-.01],[side*.39,.21,.16],.092,robeColor);
+          segment('calves',[side*.39,.21,.16],[side*.37,-.185,.02],.060,robeColor);
+          place('feet',side*.37,-.20,.072,.074,.063,.116,black);
+        }else{
+          segment('calves',[side*.081,.58,-legMotion*.016],[side*.079,heel+.055,legMotion*.16],.067,robeColor);
+          place('feet',side*.079,heel,legMotion*.16+.035,.075,.058,.117,black);
+        }
+        const forearm=person.mount?[side*.155,.61,.43]:person.stand&&!moving?[side*.16,.87+upper+gesture*.27,.245+gesture*(side>0?.26:.09)]
+          :person.seated?[side*.14,.51+.021*Math.sin(time+person.phase),.31]:person.cart?[side*.22,.68+upper,.27]:person.payload===2 && side===1 ? [side*.17,1.43+upper,.12] :
           [side*(person.style===1?.191:.252),.854+upper,-legMotion*.129+.038];
         segment('arms',[side*.208,1.34+upper,.005],forearm,.092,robeColor);
         place('hand',...forearm,.052,.064,.049,faceColor);
+        if(offered&&side===1)place('parcel',forearm[0],forearm[1]+.06,forearm[2]+.019,.077,.086,.077,goodsColors[person.stand.goods]);
         segment('collar',[side*.105,1.396+upper,.087],[-side*.036,1.216+upper,.123],.021,pale);
       }
       if(person.payload===1) place('parcel',.229,.90+upper,.17,.181,.147,.117,grain);
@@ -399,16 +466,7 @@ function createWalkers(scene,world,mats,random,isMobile) {
       if(slot.model.instanceColor)slot.model.instanceColor.needsUpdate=true;
     }
   }
-  function crew(barges){
-    for(let i=0;i<barges.length;i++){
-      walkers.push({boat:barges[i],x:0,z:0,walking:false,style:i%3,scale:.93,shade:new T.Color(robe[i]),
-        faces:new T.Color(skin[i%skin.length]),payload:0,phase:random()*TAU});
-    }
-  }
-  function push(carts){
-    for(const cart of carts)walkers.push({cart,walking:true,style:0,scale:.96,speed:1.05,shade:new T.Color(robe[3+cart.index]),faces:new T.Color(skin[cart.index]),payload:0,phase:random()*TAU});
-  }
-  return {update,crew,push,count:walkers.length};
+  return {update,count:walkers.length};
 }
 
 function createCarts(scene,mats) {
@@ -436,14 +494,119 @@ function createCarts(scene,mats) {
   });
 }
 
+function createMounts(scene,world) {
+  const mats=world.materials;
+  const street=[ [8,-25.1],[28,-25.7],[58,-25.55],[90,-25.72],[124,-25.8],[153,-26.0],
+    [157,-24.9],[151,-23.7],[116,-23.7],[85,-23.35],[54,-23.55],[24,-23.45],[11,-23.45] ];
+  const road=[ [-139,24.5],[-123,24.2],[-105,20.2],[-85,19.46],[-77,17.65],[-71,17.65],[-62,18.4],[-54,18.1],
+    [-56,21.3],[-79,22.15],[-95,21.6],[-107,21.0],[-127,26.5],[-138,27.0] ];
+  const coatColors=[0x83573d,0x665953,0x996942];
+  const blanketColors=[0x984d39,0x426c64,0xa07443];
+  const routes=[street,street,road];
+  const toward=new T.Vector3(), midpoint=new T.Vector3(), difference=new T.Vector3();
+  const attach=(part,a,b)=>{
+    difference.subVectors(b,a);
+    part.position.copy(a).lerp(b,.5);
+    part.scale.y=difference.length();
+    part.quaternion.setFromUnitVectors(up,difference.normalize());
+  };
+  return routes.map((points,index)=>{
+    const route=new T.CatmullRomCurve3(points.map(([x,z])=>V(x,0,z)),true,'centripetal');
+    const length=route.getLength();
+    const pace=[2.18,1.86,2.38][index];
+    const start=[27,166,31][index];
+    const root=new T.Group(), torso=new T.Group(), tail=new T.Group();
+    root.add(torso);
+    scene.add(root);
+    const coat=new T.MeshStandardMaterial({color:coatColors[index],roughness:.91});
+    const muzzle=new T.MeshStandardMaterial({color:index===1?0x857970:0x574337,roughness:.88});
+    const dark=new T.MeshStandardMaterial({color:0x2f271e,roughness:.94});
+    const blanket=mats.sage.clone();
+    blanket.color.setHex(blanketColors[index]);
+    const shape=(m,x,y,z,w,h,d,pitch=0,parent=torso)=>{
+      const part=mesh(round,m,parent,x,y,z,w,h,d);
+      part.rotation.x=pitch;
+      return part;
+    };
+    shape(coat,0,1.08,-.06,.30,.324,.75);
+    shape(coat,0,1.04,-.55,.275,.337,.328);
+    shape(coat,0,1.13,.52,.252,.356,.31);
+    shape(coat,0,1.47,.70,.175,.434,.239,.52);
+    shape(coat,0,1.68,.88,.131,.275,.162,.55);
+    shape(coat,0,1.775,1.015,.155,.162,.261,.54);
+    shape(muzzle,0,1.603,1.275,.121,.107,.188,.45);
+    shape(dark,0,1.84,.912,.077,.134,.159,.37);
+    for(const side of [-1,1]){
+      shape(coat,side*.079,1.986,.986,.036,.138,.051,.24);
+      shape(dark,side*.078,2.008,1.014,.022,.075,.025,.21);
+      shape(dark,side*.124,1.777,1.101,.024,.025,.030);
+      shape(dark,side*.084,1.621,1.411,.029,.019,.021);
+      shape(blanket,side*.267,1.208,-.125,.058,.195,.367);
+      shape(mats.beam,side*.299,1.06,-.138,.022,.280,.062);
+      stick(torso,mats.beam,V(side*.096,1.638,1.25),V(side*.156,1.69,.42),.012);
+      stick(torso,mats.beam,V(side*.106,1.672,1.25),V(side*.139,1.86,.981),.016);
+      const stirrup=mesh(torus,mats.iron,torso,side*.36,.864,.082,.088,.112,.065);
+      stirrup.rotation.y=Math.PI/2;
+    }
+    shape(blanket,0,1.383,-.112,.284,.105,.393);
+    shape(mats.beam,0,1.476,-.083,.214,.104,.271);
+    shape(mats.timber,0,1.507,.144,.183,.090,.044);
+    shape(mats.timber,0,1.505,-.304,.183,.090,.054);
+    for(let k=0;k<9;k++){
+      shape(dark,0,1.87-k*.064,.815-k*.042,.056,.104,.082,.40);
+    }
+    tail.position.set(0,1.28,-.77);
+    torso.add(tail);
+    shape(dark,0,-.15,-.114,.060,.24,.061,.64,tail);
+    shape(dark,0,-.37,-.287,.074,.252,.069,.37,tail);
+    shape(dark,0,-.547,-.377,.059,.183,.052,.43,tail);
+    batchParts(torso);
+    batchParts(tail);
+
+    const legs=[];
+    for(const front of [true,false])for(const side of [-1,1]){
+      const x=side*.183,z=front?.507:-.535;
+      const hip=V(x,front?1.076:1.065,z),knee=V(x,.544,z),hoof=V(x,.105,z);
+      const thigh=stick(root,coat,hip,knee,front?.096:.125,jacket);
+      const calf=stick(root,coat,knee,hoof,front?.057:.065,skirt);
+      const foot=shape(dark,x,.073,z,.064,.072,.108,0,root);
+      legs.push({front,x,z,hip,knee,hoof,thigh,calf,foot,phase:(front?0:Math.PI)+side*Math.PI*.5});
+    }
+    const mount={root,bob:0,update};
+    function update(time){
+      const distance=(time*pace+start)%length;
+      route.getPointAt(distance/length,midpoint);
+      route.getTangentAt(distance/length,toward);
+      const {x,z}=midpoint;
+      root.position.set(x,world.walkHeight(x,z)??groundY(x,z),z);
+      root.rotation.y=Math.atan2(toward.x,toward.z);
+      const gait=time*pace*4.1+index;
+      mount.bob=.027*Math.cos(gait*2);
+      torso.position.y=mount.bob;
+      tail.rotation.y=Math.sin(gait*.52)*.31;
+      for(const leg of legs){
+        const phase=gait+leg.phase;
+        const swing=Math.sin(phase), lift=Math.max(0,Math.cos(phase));
+        leg.hip.y=(leg.front?1.076:1.065)+mount.bob;
+        leg.knee.set(leg.x,.51+lift*.17,leg.z+swing*.147+(leg.front?-.13:.13)*lift);
+        leg.hoof.set(leg.x,.128+lift*.20,leg.z+swing*.258);
+        attach(leg.thigh,leg.hip,leg.knee);
+        attach(leg.calf,leg.knee,leg.hoof);
+        leg.foot.position.set(leg.x,leg.hoof.y-.055,leg.hoof.z+.027);
+        leg.foot.rotation.x=-lift*.42;
+      }
+    }
+    return mount;
+  });
+}
+
 export function createLife(scene, world, small) {
   const random=seeded(1973);
   const boats=buildVessels(scene,world.materials,random);
-  const walkers=createWalkers(scene,world,world.materials,random,small);
-  walkers.crew(boats);
   const carts=createCarts(scene,world.materials);
-  walkers.push(carts);
-  function update(time) {
+  const mounts=createMounts(scene,world);
+  const walkers=createWalkers(scene,world,world.materials,random,small,boats,carts,mounts);
+  function update(time,view) {
     for(const boat of boats){
       const {root,mast,wake,oar,rudder,length,phase,route,docked}=boat;
       const x=docked?boat.start:((((boat.start+183)+time*boat.speed*route)%374+374)%374)-183;
@@ -477,7 +640,8 @@ export function createLife(scene, world, small) {
       root.rotation.y=Math.atan2(c-a,d-b)+(forward?0:Math.PI);
       wheels.forEach(wheel=>wheel.rotation.x=time*2.30);
     }
-    walkers.update(time);
+    for(const mount of mounts) mount.update(time);
+    walkers.update(time,view);
   }
-  return {update,boats,carts,headcount:walkers.count};
+  return {update,boats,carts,mounts,headcount:walkers.count};
 }
