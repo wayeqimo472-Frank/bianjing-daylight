@@ -1,5 +1,6 @@
 export function setupSound(button, label) {
-  let sound, active=false, lastStep=0;
+  let sound, active=true, lastStep=0;
+  const unlock = new AbortController();
   const zones={
     field:[390,.10,.016,.046], river:[490,.17,.025,.026], dock:[590,.14,.062,.018],
     market:[780,.068,.126,.013], shop:[570,.046,.10,.005], lane:[510,.071,.044,.033],
@@ -23,26 +24,47 @@ export function setupSound(button, label) {
       track.playbackRate.value=rate;
       filter.type=type;
       filter.frequency.value=frequency;
+      gain.gain.value=0;
       track.connect(filter).connect(gain).connect(output);
       track.start(Math.random()*1.2);
       return {filter,gain};
     }
     return {audio,noise,output,wind:bed('lowpass',510,1.22),crowd:bed('bandpass',590,1.47)};
   }
-  button.setAttribute('aria-label','开启环境音');
-  button.addEventListener('click',async()=>{
+  function render() {
+    button.setAttribute('aria-pressed',String(active));
+    button.setAttribute('aria-label',active?'关闭环境音':'开启环境音');
+    label.textContent=active?(sound?.audio.state==='running'?'环境音已开':'环境音待播放'):'环境音';
+  }
+  async function resume() {
+    if (!active) return;
     try{
       sound??=engine();
+      sound.output.gain.setTargetAtTime(.72,sound.audio.currentTime,.12);
       await sound.audio.resume();
-      active=!active;
-      button.setAttribute('aria-pressed',String(active));
-      button.setAttribute('aria-label',active?'关闭环境音':'开启环境音');
-      label.textContent=active?'环境音已开':'环境音';
-      sound.output.gain.setTargetAtTime(active?.72:0,sound.audio.currentTime,.12);
+      if (sound.audio.state==='running') unlock.abort();
+      render();
     }catch{
-      label.textContent='环境音不可用';
+      render();
     }
+  }
+  // Browsers can require a user gesture to start a Web Audio context.
+  for (const type of ['pointerdown','pointerup','touchend','keydown','click']) {
+    window.addEventListener(type,event=>{
+      if (!event.isTrusted || button.contains(event.target)) return;
+      if (type==='pointerdown' && event.pointerType!=='mouse') return;
+      if (type==='pointerup' && event.pointerType==='mouse') return;
+      void resume();
+    },{capture:true,signal:unlock.signal});
+  }
+  button.addEventListener('click',()=>{
+    active=!active;
+    if (active) void resume();
+    else if (sound) sound.output.gain.setTargetAtTime(0,sound.audio.currentTime,.12);
+    render();
   });
+  render();
+  void resume();
   function chirp(frequency,level, t) {
     const {audio,output}=sound;
     const note=audio.createOscillator(),gain=audio.createGain();
@@ -57,7 +79,7 @@ export function setupSound(button, label) {
   }
   let nextChirp=5.1;
   function update(zone, moving, nearBridge, dt) {
-    if(!active||!sound||document.hidden)return;
+    if(!active||sound?.audio.state!=='running'||document.hidden)return;
     const [frequency,breeze,crowd,bird]=zones[zone]??zones.river;
     const {audio,output,noise}=sound;
     const t=audio.currentTime;

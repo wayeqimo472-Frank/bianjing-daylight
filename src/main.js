@@ -8,6 +8,7 @@ import { setupSound } from './sound.js';
 const byId=id=>document.getElementById(id);
 const app=byId('experience');
 const canvas=byId('world');
+const sound=setupSound(byId('sound'),byId('sound-label'));
 const reduced=matchMedia('(prefers-reduced-motion: reduce)');
 const touch=matchMedia('(pointer: coarse)');
 const small=touch.matches||innerWidth<680;
@@ -41,7 +42,6 @@ async function launch() {
   const life=createLife(scene,world,small);
   renderer.compile(scene,camera);
 
-  const sound=setupSound(byId('sound'),byId('sound-label'));
   const keys=new Set();
   const pointer={id:null,x:0,y:0};
   const thumb={id:null,x:0,y:0};
