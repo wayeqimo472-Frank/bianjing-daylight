@@ -670,31 +670,54 @@ export function createWorld(scene, textures, wind) {
     gatePosts.push({position:f(3.81,floor,-.94),yaw:theta-2.47});
   }
 
-  function towerStair(f,theta,a,floor) {
-    const top=-4.38,foot=-21.48,width=2.90,count=41;
-    const stride=(top-foot)/count;
-    const base=groundY(f(a,0,foot).x,f(a,0,foot).z);
-    const rise=(floor-base)/count;
-    for(let i=0;i<count;i++){
-      const b=foot+(i+.5)*stride;
-      const y=base+(i+1)*rise;
-      localBox(f,theta,'brick',a,(y-.21)/2,b,width,y+.21,stride+.009);
-      localBox(f,theta,'stone',a,y-.044,b,width+.026,.088,stride+.011);
+  function towerStair(f,theta,side,floor) {
+    const start=5.6, bend=10.84, end=12.02;
+    const lower=-7.04, upper=-5.13, width=1.55, count=23;
+    const foot=f(side*start,0,lower);
+    const base=groundY(foot.x,foot.z);
+    const mid=(base+floor)/2;
+    const bounds=(a0,a1,b0,b1)=>{
+      const p=f(side*a0,0,b0),q=f(side*a1,0,b1);
+      return {x0:Math.min(p.x,q.x),x1:Math.max(p.x,q.x),z0:Math.min(p.z,q.z),z1:Math.max(p.z,q.z)};
+    };
+    function masonry(a,b,w,d,y,shade) {
+      localBox(f,theta,'wall',side*a,(y-.24)/2,b,w,y+.24,d,shade);
+      localBox(f,theta,'brick',side*a,y-.055,b,w+.016,.11,d+.006,shade);
     }
-    for(const side of [-1,1]){
-      const edge=a+side*(width/2-.12);
-      beam('brick',f(edge,base+.24,foot),f(edge,floor+.24,top),.30,.48);
-      beam('stone',f(edge,base+.47,foot),f(edge,floor+.47,top),.34,.12);
-      const p=f(a+side*1.96,0,foot-.83);
+    function flight(from,to,b,bottom,top) {
+      const tread=(to-from)/count;
+      const rise=(top-bottom)/count;
+      for(let i=0;i<count;i++){
+        const a=from+(i+.5)*tread;
+        const y=bottom+(i+1)*rise;
+        masonry(a,b,Math.abs(tread),width,y,[.87,.96,.92,.99][i%4]);
+        for(const flank of [-1,1]){
+          const edge=b+flank*(width/2-.095);
+          localBox(f,theta,'brick',side*a,y+.168,edge,Math.abs(tread)+.01,.34,.19,.92);
+          localBox(f,theta,'stone',side*a,y+.337,edge,Math.abs(tread)+.016,.069,.20,.90);
+        }
+      }
+      return {...bounds(from,to,b-width/2,b+width/2),from:f(side*from,0,b).z,to:f(side*to,0,b).z,bottom,rise,count};
+    }
+    const paths=[flight(start,bend,lower,base,mid),flight(bend,start,upper,mid,floor)];
+    const near=upper+width/2, far=lower-width/2;
+    const turn={...bounds(bend,end,near,far),level:mid};
+    masonry((bend+end)/2,(near+far)/2,end-bend,near-far,mid,.91);
+    localBox(f,theta,'brick',side*(end-.065),mid+.27,(near+far)/2,.13,.54,near-far,.92);
+    for(const edge of [near,far]){
+      localBox(f,theta,'brick',side*((bend+end)/2),mid+.24,edge,end-bend,.48,.16,.91);
+    }
+    const exit={...bounds(4.36,start,near+.24,upper-width/2),level:floor};
+    masonry((4.36+start)/2,(near+.24+upper-width/2)/2,start-4.36,near+.24-(upper-width/2),floor,.93);
+    gateStairs.push({paths,turn,exit});
+    for(const flank of [-1,1]){
+      const p=f(side*(start-.83),0,lower+flank*1.24);
       p.y=groundY(p.x,p.z);
-      gatePosts.push({position:p,yaw:theta+Math.PI+side*.12});
+      gatePosts.push({position:p,yaw:(side>0?Math.PI:0)+flank*.13});
     }
-    const p=f(a-width/2,0,top),q=f(a+width/2,0,foot);
-    gateStairs.push({x0:p.x,x1:q.x,z0:p.z,z1:q.z,base,rise,count,step:stride});
-    const marker=foot-.39;
-    sign(f,theta,'登城',a+1.56,1.97,marker+.054,.48,.96,true);
-    sign(f,theta+Math.PI,'登城',a+1.56,1.97,marker-.054,.48,.96,true);
-    localBox(f,theta,'timber',a+1.56,1.19,marker,.085,2.39,.087);
+    const marker=side*(start-.27),post=lower-1.00;
+    sign(f,side>0?Math.PI:0,'登城',marker-side*.054,1.88,post,.43,.85,true);
+    localBox(f,theta,'timber',marker,1.15,post,.087,2.21,.085,.94);
   }
 
   function gate() {
@@ -703,7 +726,7 @@ export function createWorld(scene, textures, wind) {
     const f=local(x,0,z,theta);
     const height=8.75, depth=8.5, radius=3.98, spring=2.95;
     const floor=height+.185;
-    const stairSides=[-8.2,7.65];
+    const stairOpenings=[-5.01,5.01];
     const opening = a => spring + Math.sqrt(Math.max(0,radius*radius-a*a));
     const top=height-.11;
     for(const [a,b] of [[-49,-radius],[radius,13.6]]) {
@@ -713,7 +736,7 @@ export function createWorld(scene, textures, wind) {
       localBarrier(f,(a+b)/2,0,b-a,depth);
       for(let p=a+.30;p<b-.25;p+=1.25) {
         for(const side of [-1,1]) {
-          if(side===-1&&stairSides.some(a=>Math.abs(a-p)<1.81))continue;
+          if(side===-1&&stairOpenings.some(a=>Math.abs(a-p)<1.42))continue;
           localBox(f,theta,'brick',p,height+.43,side*(depth/2-.18),.72,.77,.42);
           towerBarrier(f,p,side*(depth/2-.18),.72,.42);
         }
@@ -751,14 +774,14 @@ export function createWorld(scene, textures, wind) {
       localBox(f,theta,'brick',a,floor+.43,0,.29,.89,8.86);
       towerBarrier(f,a,0,.29,8.86);
     }
-    for(const [a,w] of [[-10.98,1.87],[-.275,12.45],[10.69,2.61]]){
+    for(const [a,w] of [[-9.12,5.82],[0,8.73],[9.12,5.82]]){
       localBox(f,theta,'brick',a,floor+.28,-4.05,w,.56,.38);
       towerBarrier(f,a,-4.05,w,.38);
     }
     localBox(f,theta,'brick',0,floor+.23,4.04,24.0,.46,.39);
     towerBarrier(f,0,4.04,24.0,.39);
     towerRoom(f,theta,floor);
-    for(const a of stairSides)towerStair(f,theta,a,floor);
+    for(const side of [-1,1])towerStair(f,theta,side,floor);
     sign(f,theta,'汴京',0,7.86,deep+.13,1.95,.54);
     for(const side of [-1,1]){
       gatePosts.push({position:f(side*7.75,floor,deep-.60),yaw:theta-side*.14});
@@ -921,7 +944,7 @@ export function createWorld(scene, textures, wind) {
 
   gate();
   for(const [x,z,w,d,kind,label] of [
-    [116.2,-40.3,6.8,8.4,'store','食店'],[122,-41.8,5.0,7.4,'home'],
+    [116.2,-43.05,6.8,8.4,'store','食店'],[122,-41.8,5.0,7.4,'home'],
     [136.8,-34.7,7.1,8.7,'home'],[149.9,-34.8,7.6,8.0,'store','布'],
     [160.4,-35.0,8.5,8.5,'home'],[172,-34.3,10.0,8.0,'home'],
     [119.9,-50.8,9.0,7.1,'home'],[137.3,-51.4,9.0,7.5,'home'],
@@ -1032,17 +1055,26 @@ export function createWorld(scene, textures, wind) {
   }
 
   const inRect=(region,x,z,inset=0)=>x>=region.x0+inset&&x<=region.x1-inset&&z>=region.z0+inset&&z<=region.z1-inset;
-  const staircase=(x,z)=>gateStairs.find(stair=>inRect(stair,x,z));
+  function stairSurface(x,z) {
+    for(const {paths,turn,exit} of gateStairs){
+      if(inRect(turn,x,z))return turn;
+      if(inRect(exit,x,z))return exit;
+      for(const path of paths)if(inRect(path,x,z))return path;
+    }
+  }
   function onGateTerrace(x,z,elevation) {
-    return elevation>=gateTerrace.floor-.65&&inRect(gateTerrace,x,z);
+    return elevation>=gateTerrace.floor-.65
+      &&(inRect(gateTerrace,x,z)||gateStairs.some(({exit})=>inRect(exit,x,z)));
   }
   function walkHeight(x,z,elevation=0) {
     if (x<bounds.west||x>bounds.east||z<bounds.north||z>bounds.south) return null;
     if(onGateTerrace(x,z,elevation))return gateTerrace.floor;
-    const stair=staircase(x,z);
+    const stair=stairSurface(x,z);
     if(stair){
-      const tread=Math.min(stair.count,1+Math.floor((stair.x1-x)/stair.step));
-      return stair.base+tread*stair.rise;
+      if(stair.level!==undefined)return stair.level;
+      const progress=T.MathUtils.clamp((z-stair.from)/(stair.to-stair.from),0,1);
+      const tread=Math.min(stair.count,1+Math.floor(progress*stair.count));
+      return stair.bottom+tread*stair.rise;
     }
     if (Math.abs(x-bridgeX)<bridgeWidth/2-.14 && Math.abs(z-riverCenter(bridgeX))<=bridgeSpan+.04) return arch(z);
     if (Math.abs(x-gangwayX)<.78 && z>=gangwayFrom && z<=gangwayTo)return gangwayHeight(z);
@@ -1051,8 +1083,8 @@ export function createWorld(scene, textures, wind) {
     return groundY(x,z);
   }
   function isObstacle(x,z,margin=.30,elevation=0){
-    const stair=staircase(x,z);
-    if(stair&&(z<stair.z0+.22+margin||z>stair.z1-.22-margin))return true;
+    const stair=stairSurface(x,z);
+    if(stair?.count&&(x<stair.x0+.16+margin||x>stair.x1-.16-margin))return true;
     const meetsTerrace=stair&&elevation>=gateTerrace.floor-.65;
     const walls=(meetsTerrace||onGateTerrace(x,z,elevation))?towerObstacles:obstacles;
     return walls.some(o=>x>o.x0-margin&&x<o.x1+margin&&z>o.z0-margin&&z<o.z1+margin);

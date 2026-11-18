@@ -358,12 +358,14 @@ async function launch() {
       m.fillStyle=o.x0>101&&o.x1<112?'#836f58':'#a49875';
       m.fillRect(mx(o.x0),my(o.z0),mx(o.x1)-mx(o.x0),my(o.z1)-my(o.z0));
     }
-    for(const stair of world.gateStairs){
+    for(const {paths,turn,exit} of world.gateStairs){
       m.fillStyle='#a48b63';
-      m.fillRect(mx(stair.x0),my(stair.z0),mx(stair.x1)-mx(stair.x0),my(stair.z1)-my(stair.z0));
+      for(const stair of [...paths,turn,exit]){
+        m.fillRect(mx(stair.x0),my(stair.z0),mx(stair.x1)-mx(stair.x0),my(stair.z1)-my(stair.z0));
+      }
       m.strokeStyle='#65563e';m.lineWidth=1;
-      for(let x=stair.x0+2;x<stair.x1;x+=3){
-        m.beginPath();m.moveTo(mx(x),my(stair.z0));m.lineTo(mx(x),my(stair.z1));m.stroke();
+      for(const stair of paths)for(let z=stair.z0+1.2;z<stair.z1;z+=1.4){
+        m.beginPath();m.moveTo(mx(stair.x0),my(z));m.lineTo(mx(stair.x1),my(z));m.stroke();
       }
     }
     m.beginPath();
