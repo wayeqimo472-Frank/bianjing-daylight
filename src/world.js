@@ -70,6 +70,7 @@ export function createWorld(scene, textures, wind) {
   const obstacles = [];
   const decks = [];
   const trades = [];
+  const gatePosts = [];
   const signs = new Map();
   const object = new T.Object3D();
   const variation = () => .80 + random() * .23;
@@ -606,6 +607,13 @@ export function createWorld(scene, textures, wind) {
     roof(f,15.8,10.5,height+3.30,2.65,'tileDark');
     roof(f,13.3,8.9,height+1.10,.95,'tile');
     sign(f,theta,'汴京',0,7.86,deep+.13,1.95,.54);
+    for(const side of [-1,1]){
+      gatePosts.push({position:f(side*7.75,height,deep-.60),yaw:theta-side*.14});
+      gatePosts.push({position:f(side*7.75,height,-deep+.60),yaw:theta+Math.PI+side*.09});
+      const post=f(side*4.90,0,deep+.94);
+      post.y=groundY(post.x,post.z);
+      gatePosts.push({position:post,yaw:theta-side*.25});
+    }
     const laneEnd=119;
     lane([[94,-25],[laneEnd,-25]],8.7,'pave');
   }
@@ -799,7 +807,7 @@ export function createWorld(scene, textures, wind) {
     [-56,24,1.0,1],[-42,20.6,.96,1],[-22,18.3,.96,1],[-10,27,1.22,1],[10,20.4,.99,1],[28,29.0,.82,1],
     [48,20.2,1.04,1],[59,19.9,1.25,1],[70,26,1.00,1],
     [-39,-22,1.11,1],[-16,-24,1.12,1],[7,-15.5,.86,1],[34,-28.8,.93,0],
-    [55,-15.5,1.01,1],[76,-15.8,.85,1],[93,-18.1,1.12,1],[112,-17.2,.91,1],
+    [55,-15.5,1.01,1],[76,-15.8,.85,1],[93,-15.1,1.12,1],[112,-17.2,.91,1],
     [126,-53,1.12,0],[132,-48,.99,1],[128,-66,1.02,1],[137,-41,.83,0]
   ]) tree(x,z,s,kind===1);
   for (let i=0;i<74;i++){
@@ -881,5 +889,5 @@ export function createWorld(scene, textures, wind) {
   function isObstacle(x,z,margin=.30){
     return obstacles.some(o=>x>o.x0-margin&&x<o.x1+margin&&z>o.z0-margin&&z<o.z1+margin);
   }
-  return { materials, walkHeight, isObstacle, obstacles, trades };
+  return { materials, walkHeight, isObstacle, obstacles, trades, gatePosts };
 }

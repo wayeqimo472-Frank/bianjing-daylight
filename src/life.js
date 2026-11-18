@@ -12,6 +12,7 @@ const skirt = new T.CylinderGeometry(.65,1,1,10);
 const jacket = new T.CylinderGeometry(1,.72,1,10);
 const torus = new T.TorusGeometry(1,.083,6,19);
 const cloak = new T.CylinderGeometry(.71,1,1,8);
+const finial = new T.OctahedronGeometry(1);
 const TAU = Math.PI*2;
 
 function mesh(geometry, mat, group, x,y,z,sx=1,sy=1,sz=1) {
@@ -226,6 +227,30 @@ function sample(route,distance){
     Math.atan2(seg.b[0]-seg.a[0],seg.b[1]-seg.a[1])];
 }
 
+function cityGuards(world, skin){
+  const uniform=new T.Color(0xab6650);
+  const recruit=(i,post)=>({ guard:true,style:0,scale:.98+(i%3)*.018,
+    shade:uniform,faces:new T.Color(skin[i%skin.length]),payload:0,phase:i*.37,...post });
+  const sentries=world.gatePosts.map((post,i)=>recruit(i,{post,speed:0}));
+  const squads=[
+    [[27,-24.95],[33,-24.95],[43,-25.08],[59,-25.4],[76,-25.3],[89,-25.55],[99.7,-25.55],
+      [100.3,-23.8],[86,-23.25],[69,-23.3],[55,-23.45],[37,-23.5],[27.4,-23.7]],
+    [[111,-25.45],[121,-25.45],[128.8,-27.55],[129.2,-35.5],[129.4,-44.3],[130,-48.65],
+      [131.1,-46.75],[131.25,-40],[131.1,-34],[132.15,-29.6],[133.25,-25.8],[131,-23.55],[120,-23.55],[111,-23.5]]
+  ];
+  for(const [i,points] of squads.entries()){
+    const route=new T.CatmullRomCurve3(points.map(([x,z])=>V(x,0,z)),true,'centripetal');
+    const length=route.getLength();
+    for(let member=0;member<4;member++){
+      sentries.push(recruit(member,{
+        patrol:{route,length,lead:(i===0?8.2:27.4)-Math.floor(member/2)*1.28,side:member%2===0?-.41:.41},
+        walking:true,speed:i===0?1.07:1.01
+      }));
+    }
+  }
+  return sentries;
+}
+
 function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
   const paths=circuits.map(makeRoute);
   const walkers=[];
@@ -258,6 +283,14 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
   pool('parcel',round,mats.straw);
   pool('basket',jacket,mats.straw);
   pool('rope',tube,mats.oldwood);
+  const armour=new T.MeshStandardMaterial({color:0x77796f,roughness:.77,metalness:.26});
+  pool('helmet',cap,armour);
+  pool('helmetRim',tube,armour);
+  pool('chinGuard',boxGeo,armour);
+  pool('armouredCoat',jacket,armour);
+  pool('armourBand',tube,armour);
+  pool('pauldron',round,armour);
+  pool('spearHead',finial,armour);
   for(let p=0;p<paths.length;p++){
     for(let k=0;k<populations[p];k++){
       const scale=.86+random()*.21;
@@ -304,10 +337,14 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
     walkers.push({mount,seated:true,style:0,scale:.98,shade:new T.Color(robe[5+i]),faces:new T.Color(skin[i]),
       payload:0,phase:i*.9,speed:0});
   }
+  const guards=cityGuards(world,skin);
+  walkers.push(...guards);
+  const guardPieces={helmet:1,helmetRim:1,chinGuard:2,armouredCoat:1,armourBand:4,pauldron:2,spearHead:1};
   const groups=walkers.length;
   for(const [key,slot] of matsWalk){
     const copies=['hand','arms','calves','feet','collar','basket','rope','ears','eyes'].includes(key)?2:1;
-    const model=new T.InstancedMesh(slot.geometry,slot.material,groups*copies+(key==='calves'?mounts.length*2:0));
+    const capacity=guardPieces[key]?guards.length*guardPieces[key]:groups*copies+(key==='calves'?mounts.length*2:0);
+    const model=new T.InstancedMesh(slot.geometry,slot.material,capacity);
     model.instanceMatrix.setUsage(T.DynamicDrawUsage);
     model.castShadow=!['nose','collar','rope'].includes(key);
     model.receiveShadow=true;
@@ -319,6 +356,7 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
   const object=new T.Object3D();
   const quaternion=new T.Quaternion();
   const pos=V(0,0,0);
+  const patrolPoint=V(0,0,0), patrolHeading=V(0,0,0);
   let person,x,y,z,yaw,c,s;
   function worldPoint(px,py,pz){
     const k=person.scale;
@@ -348,6 +386,8 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
   const pale=new T.Color(0xe4d8bb);
   const black=new T.Color(0x938678);
   const grain=new T.Color(0xbfa57d);
+  const steel=new T.Color(0xc6cbcd);
+  const darkSteel=new T.Color(0x918e89);
   const goodsColors={pot:new T.Color(0xb9c1a6),bread:new T.Color(0xe4bd83),
     cloth:new T.Color(0xcc9385),fruit:new T.Color(0xb5a866)};
   const tradeDistanceSquared=(isMobile?60:86)**2;
@@ -356,7 +396,18 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
     for(person of walkers){
       if(person.stand&&view&&person.stand.seller.distanceToSquared(view)>tradeDistanceSquared)continue;
       let moving=person.walking, gesture=0, offered=false;
-      if(person.mount){
+      if(person.post){
+        ({x,z}=person.post.position);
+        yaw=person.post.yaw+.13*Math.sin(time*.61+person.phase);
+      }else if(person.patrol){
+        const {route,length,lead,side}=person.patrol;
+        const u=(time*person.speed+lead)%length/length;
+        route.getPointAt(u,patrolPoint);
+        route.getTangentAt(u,patrolHeading);
+        x=patrolPoint.x+patrolHeading.z*side;
+        z=patrolPoint.z-patrolHeading.x*side;
+        yaw=Math.atan2(patrolHeading.x,patrolHeading.z);
+      }else if(person.mount){
         const horse=person.mount.root;
         x=horse.position.x;z=horse.position.z;yaw=horse.rotation.y;
       }else if(person.stand){
@@ -404,6 +455,7 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
         yaw = (person.seated?Math.PI:person.phase) + .15*Math.sin(time*.64+person.phase);
       }
       y=world.walkHeight(x,z)??groundY(x,z);
+      if(person.post)y=person.post.position.y;
       if(person.boat){
         const boat=person.boat.root;
         x=boat.position.x-person.boat.route*person.boat.length*.35;
@@ -429,8 +481,20 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
         place('eyes',side*.044,1.568+upper,.102,.012,.009,.006,black);
       }
       place('nose',0,1.54+upper,.108,.032,.027,.028,faceColor);
-      place('hat',0,1.635+upper,.003,.108,.075,.104,black);
-      if(person.style===1) place('hair',0,1.67+upper,-.082,.061,.075,.067,black);
+      if(person.guard){
+        place('helmet',0,1.625+upper,0,.141,.153,.138,steel);
+        place('helmetRim',0,1.622+upper,.009,.146,.025,.143,darkSteel);
+        place('armouredCoat',0,1.174+upper,0,.252,.366,.157,darkSteel);
+        for(let row=0;row<4;row++){
+          const high=.85+upper+row*.116;
+          place('armourBand',0,high,0,.233+row*.006,.034,.158,row%2?steel:darkSteel);
+        }
+        segment('pole',[.309,.11+upper,.255],[.309,2.041+upper,.255],.022,grain);
+        place('spearHead',.309,2.132+upper,.255,.049,.14,.027,steel);
+      }else{
+        place('hat',0,1.635+upper,.003,.108,.075,.104,black);
+        if(person.style===1) place('hair',0,1.67+upper,-.082,.061,.075,.067,black);
+      }
       for(const side of [-1,1]){
         const legMotion=stride*side;
         const heel=.067+Math.max(0,-legMotion)*.095;
@@ -442,7 +506,12 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
           segment('calves',[side*.081,.58,-legMotion*.016],[side*.079,heel+.055,legMotion*.16],.067,robeColor);
           place('feet',side*.079,heel,legMotion*.16+.035,.075,.058,.117,black);
         }
-        const forearm=person.mount?[side*.155,.61,.43]:person.stand&&!moving?[side*.16,.87+upper+gesture*.27,.245+gesture*(side>0?.26:.09)]
+        if(person.guard){
+          place('chinGuard',side*.121,1.568+upper,-.036,.030,.127,.119,darkSteel);
+          place('pauldron',side*.24,1.339+upper,0,.107,.091,.159,steel,.13);
+        }
+        const forearm=person.guard&&side===1?[.309,1.12+upper,.255]
+          :person.mount?[side*.155,.61,.43]:person.stand&&!moving?[side*.16,.87+upper+gesture*.27,.245+gesture*(side>0?.26:.09)]
           :person.seated?[side*.14,.51+.021*Math.sin(time+person.phase),.31]:person.cart?[side*.22,.68+upper,.27]:person.payload===2 && side===1 ? [side*.17,1.43+upper,.12] :
           [side*(person.style===1?.191:.252),.854+upper,-legMotion*.129+.038];
         segment('arms',[side*.208,1.34+upper,.005],forearm,.092,robeColor);
