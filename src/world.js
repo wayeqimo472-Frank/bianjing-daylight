@@ -320,7 +320,7 @@ export function createWorld(scene, textures, wind) {
   }
 
   // The two walkable lofts face the main street (theta = 0).
-  function shopLoft(f, part, w, d, bays, label) {
+  function shopLoft(f, part, w, d, bays, label, tavern) {
     const front=d/2, back=-front;
     const left=-w/2+.13, right=w/2-.13;
     const start=2.8, top=-2.86, stairLeft=right-1.42;
@@ -374,22 +374,58 @@ export function createWorld(scene, textures, wind) {
       solid(unit,'timber',f(jamb,floor+1.50,front-.24),V(.075,1.24,.48),0,.91);
       for(const h of [1.09,1.34,1.59,1.84]) part('oldwood',jamb-.025,floor+h,front-.24,.078,.043,.49);
     }
-    const spots=[[-w*.30,front-1.44],[-w*.055,front-1.51],[-w*.29,-.80]];
-    for(const [a,b] of spots) {
-      part('oldwood',a,floor+.83,b,1.32,.11,.89);
-      for(const dx of [-.47,.47]) for(const dz of [-.30,.30]) part('timber',a+dx,floor+.40,b+dz,.09,.77,.09);
-      block(a,b,1.32,.89);
-      part('timber',a,floor+.42,b-.77,1.18,.10,.32);
-      block(a,b-.77,1.18,.32);
-      for(const dx of [-.42,.42]) part('oldwood',a+dx,floor+.20,b-.77,.11,.39,.29);
-      for(const dx of [-.29,.29]) {
-        const cup=f(a+dx,floor+.89,b-.08);
-        jug(cup.x,cup.y,cup.z,.19,'paleCeramic');
-        shopStaff.push({role:'diner',at:f(a+dx,0,b-.77),yaw:0,level:y});
+    const tableCenters=tavern
+      ? [[-3.75,front-1.73],[.05,front-1.73],[-3.75,1.03],[.05,1.03],[-3.75,-2.63],[.05,-2.63]]
+      : [[-3.10,front-1.28],[-.48,front-1.28],[-3.10,1.27],[-.48,.65],[-3.10,-1.63]];
+    const seats=tavern?[[-1,0],[1,0],[0,-1],[0,1]]:[[0,-.64],[0,.64]];
+    const wood=tavern?'lacquer':'oldwood';
+    for(const [a,b] of tableCenters) {
+      if(tavern) {
+        solid(cylinder,'oldwood',f(a,floor+.83,b),V(.73,.12,.73),0,.95);
+        solid(cylinder,'lacquer',f(a,floor+.39,b),V(.15,.77,.15),0,.89);
+        solid(cylinder,'paleCeramic',f(a,floor+.902,b),V(.22,.039,.22),0,.92);
+      } else {
+        part('oldwood',a,floor+.69,b,.83,.09,.61);
+        for(const dx of [-.30,.30]) for(const dz of [-.21,.21]) part('timber',a+dx,floor+.32,b+dz,.07,.66,.07);
+        const pot=f(a,floor+.74,b);
+        jug(pot.x,pot.y,pot.z,.29,'paleCeramic');
+      }
+      block(a,b,tavern?1.46:.83,tavern?1.46:.61);
+      for(const [dx,dz] of seats) {
+        const seatX=a+dx, seatZ=b+dz;
+        part(wood,seatX,floor+.40,seatZ,.31,.08,.30);
+        part('timber',seatX,floor+.18,seatZ,.19,.35,.19);
+        block(seatX,seatZ,.31,.30);
+        const cup=f(a+dx*.40,floor+(tavern?.90:.74),b+dz*.40);
+        jug(cup.x,cup.y,cup.z,.16,'paleCeramic');
+        shopStaff.push({role:'diner',at:f(seatX,0,seatZ),yaw:Math.atan2(-dx,-dz),level:y});
       }
     }
-    const serverX=stairLeft-.57;
-    shopStaff.push({role:'server',points:[f(serverX,0,front-1.05),f(serverX,0,top-.75)],level:y});
+    if(tavern) {
+      part('lacquer',-2.63,floor+.50,back+.41,4.8,.90,.55);
+      block(-2.63,back+.41,4.80,.55);
+      for(let i=0;i<5;i++) {
+        const jar=f(-4.52+i*.89,floor+.95,back+.38);
+        jug(jar.x,jar.y,jar.z,.51,'ceramic');
+      }
+    } else {
+      part('oldwood',-1.69,floor+.45,back+.41,3.52,.82,.57);
+      block(-1.69,back+.41,3.52,.57);
+      for(let i=0;i<5;i++) {
+        const canister=f(-3.10+i*.70,floor+.87,back+.39);
+        jug(canister.x,canister.y,canister.z,.35,'paleCeramic');
+      }
+      for(const a of [-4.04,-2.61,-1.18]) {
+        part('sage',a,floor+1.74,back+.18,1.29,.89,.045);
+        for(let i=-4;i<=4;i++) part('straw',a+i*.135,floor+1.74,back+.212,.028,.86,.026);
+        for(const h of [1.31,2.17]) part('timber',a,floor+h,back+.21,1.32,.06,.061);
+      }
+    }
+    const serviceAisles=[stairLeft-.57,tavern?-1.84:-1.80];
+    for(const [i,a] of serviceAisles.entries()) {
+      shopStaff.push({role:'server',points:[f(a,0,front-1.05),f(a,0,top-.75)],
+        level:y,tea:!tavern,routeOffset:i*.48});
+    }
     part('beam',stairX,2.45,start+.62,.69,.29,.078);
     sign(f,0,'登樓',stairX,2.45,start+.67,.61,.25);
   }
@@ -475,7 +511,7 @@ export function createWorld(scene, textures, wind) {
       }
     roof(f,w+1.52,d+1.70,body+.02,Math.min(w,d)*.31,roofKind,detail);
     if (loft) {
-      shopLoft(f,part,w,d,bays,label);
+      shopLoft(f,part,w,d,bays,label,kind==='tavern');
       roof((a,b,c)=>f(a,b,c+front+.45),w+.90,1.10,3.06,.20,'tileDark');
     } else if (floors===2 && detail) roof(f,w+.9,d+2.4,3.09,.68,'tileDark',true);
     if (shop) {

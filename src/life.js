@@ -376,10 +376,10 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
     [129.5,-45.2,1.35,.82],[147.2,-45.55,1.6,.79],[6,23,1.45,.78]]) {
     for(let i=0;i<2;i++) addLocal({x,z},{child:{rx,rz},scale:.56+i*.10,speed:1.5,phase:i*1.1+x*.2});
   }
-  for(const {role,at,yaw,points,level} of world.shopStaff) {
+  for(const {role,at,yaw,points,level,tea,routeOffset=0} of world.shopStaff) {
     if(points) {
       const route=makeRoute(points.map(p=>[p.x,p.z]));
-      addLocal(points[0],{role,route,level,walking:true,started:0,speed:.66});
+      addLocal(points[0],{role,route,level,tea,walking:true,started:route.length*routeOffset,speed:.66});
     } else addLocal(at,{role,level,heading:yaw,seated:role==='diner'});
   }
   const guards=cityGuards(world,skin);
@@ -585,7 +585,8 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
       if(cargo===3)place('cargoJar',0,1.03+upper,.39,.18,.42,.18,pale);
       if(cargo===4){
         place('cargoBox',0,.91+upper,.38,.50,.04,.32,pale);
-        place('cargoJar',0,1.02+upper,.38,.085,.18,.085,pale);
+        place('cargoJar',0,1.02+upper,.38,person.tea?.115:.085,person.tea?.13:.18,person.tea?.115:.085,
+          person.tea?goodsColors.pot:pale);
       }
       if(person.farmer){
         const tip=[.44,.57+upper-digging*.31,.89+digging*.17];
