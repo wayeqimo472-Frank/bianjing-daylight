@@ -86,12 +86,14 @@ function buildHull(length, width, material, group) {
   return hull;
 }
 
-function buildVessels(scene,mats,random) {
+function buildVessels(scene,mats,random,wharves) {
   const barges=[];
   const hullMat=mats.timber.clone();
   hullMat.color.setHex(0xa68c6b);
   hullMat.side=T.DoubleSide;
-  for(let i=0;i<9;i++){
+  const movingCount=12;
+  const moorings=[{x:-37,lane:10.5},{x:46,lane:-10.9},...wharves.filter(dock=>dock.extra)];
+  for(let i=0;i<movingCount+moorings.length;i++){
     const root=new T.Group();
     const length=i%3===1?11.2:7.6+random()*2.6;
     const width=i%3===1?3.5:2.25+random()*.58;
@@ -159,14 +161,16 @@ function buildVessels(scene,mats,random) {
     paddle.rotation.set(-.18,-.67,.36);
     const rudder=mesh(boxGeo,mats.oldwood,root,-length*.50,.22,0,.58,1.25,.125);
     rudder.rotation.z=.23;
-    const docked=i>=7;
+    const berth=moorings[i-movingCount];
+    const docked=Boolean(berth);
+    const route=i%2===0?1:-1;
     if(docked) mast.rotation.z=-1.42;
     batchParts(mast);batchParts(oar);batchParts(root,[rudder]);
     scene.add(root);
     const wake = buildWake(scene, length, width);
-    barges.push({ root, mast, oar, rudder, wake, length, docked, route:i%2===0?1:-1,
-      lane:docked?(i===7?10.5:-10.9):((i%2===0?1:-1)*(2.48+random()*6.7)),
-      speed:.72+random()*.76,start:docked?(i===7?-37:46):(-160+i*36+random()*11),phase:random()*TAU });
+    const lane=docked?(berth.lane??berth.z-riverCenter(berth.x)-berth.side*(berth.width/2+width/2+.25)):route*4.1;
+    barges.push({ root, mast, oar, rudder, wake, length, docked, route, lane,
+      speed:route>0?1.16:1.02,start:docked?berth.x:(-177+i*374/movingCount),phase:random()*TAU });
   }
   return barges;
 }
@@ -285,6 +289,9 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
   pool('belt',tube,mats.beam);
   pool('pole',tube,mats.oldwood);
   pool('parcel',round,mats.straw);
+  pool('cargoBox',boxGeo,mats.oldwood);
+  pool('cargoJar',jacket,mats.paleCeramic);
+  pool('hoe',boxGeo,mats.iron);
   pool('basket',jacket,mats.straw);
   pool('rope',tube,mats.oldwood);
   const armour=new T.MeshStandardMaterial({color:0x77796f,roughness:.77,metalness:.26});
@@ -316,10 +323,10 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
       style:r,scale:.94+r*.044,shade:new T.Color(robe[1+r*3]),faces:new T.Color(skin[r]),payload:0,phase:r*3.2});
   }
   const stationary = [[-126,23.3],[-36,14.2],[-30,19.2],[60,-23.2],[97,-22.4],[113,-22.3],[130.4,-48],
-    [125,-42.5],[65.2,-35.12],[72.5,-35.22],[66.1,-38.77],[10.3,25.1]];
+    [125,-42.5],[10.3,25.1]];
   for(let i=0;i<stationary.length;i++){
     const [x,z]=stationary[i];
-    walkers.push({x,z,walking:false,seated:i>=8&&i<=10,style:i%3,scale:.86+random()*.17,shade:new T.Color(robe[i%robe.length]),
+    walkers.push({x,z,walking:false,style:i%3,scale:.86+random()*.17,shade:new T.Color(robe[i%robe.length]),
       faces:new T.Color(skin[i%skin.length]),p:3,payload:i%4===0?1:0,phase:random()*TAU});
   }
   for(const [i,stand] of world.trades.entries()){
@@ -332,7 +339,7 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
     }
   }
   for(const [i,boat] of boats.entries()){
-    walkers.push({boat,x:0,z:0,walking:false,style:i%3,scale:.93,shade:new T.Color(robe[i]),
+    walkers.push({boat,x:0,z:0,walking:false,style:i%3,scale:.93,shade:new T.Color(robe[i%robe.length]),
       faces:new T.Color(skin[i%skin.length]),payload:0,phase:random()*TAU});
   }
   for(const cart of carts)walkers.push({cart,walking:true,style:0,scale:.96,speed:1.05,shade:new T.Color(robe[3+cart.index]),
@@ -340,6 +347,33 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
   for(const [i,mount] of mounts.entries()){
     walkers.push({mount,seated:true,style:0,scale:.98,shade:new T.Color(robe[5+i]),faces:new T.Color(skin[i]),
       payload:0,phase:i*.9,speed:0});
+  }
+  function addLocal(spot, traits) {
+    const i=walkers.length;
+    walkers.push({x:spot.x,z:spot.z,speed:0,payload:0,scale:.96,style:i%3,
+      shade:new T.Color(robe[i%robe.length]),faces:new T.Color(skin[i%skin.length]),phase:random()*TAU,
+      local:spot,...traits});
+  }
+  for(const [i,[x,z]] of [[-128,33],[-132,39],[-144,42],[-111,31],[-104,34],[-96,39],[-147,56],[-69,46],[52,44]].entries()) {
+    addLocal({x,z},{farmer:i%3===0?'rake':'hoe',heading:i*.95});
+  }
+  for(const dock of world.wharves) {
+    for(let i=0;i<3;i++) {
+      const x=dock.x+(i-1)*dock.len*.26;
+      const z=dock.z;
+      const route=makeRoute([[x,z-dock.side*dock.width*.21],[x+.34,z],[x+1.5,z+dock.side*dock.width*.28]]);
+      addLocal({x,z},{porter:i+1,walking:true,route,started:i*1.14,speed:.66+i*.06});
+    }
+  }
+  for(const [x,z,rx,rz] of [[2,-24,1.55,.70],[34,-23.7,1.65,.85],[48,-28.15,1.60,.40],[80,-24.8,1.7,.72],
+    [129.5,-45.2,1.35,.82],[147.2,-45.55,1.6,.79],[6,23,1.45,.78]]) {
+    for(let i=0;i<2;i++) addLocal({x,z},{child:{rx,rz},scale:.56+i*.10,speed:1.5,phase:i*1.1+x*.2});
+  }
+  for(const {role,at,yaw,points} of world.shopStaff) {
+    if(points) {
+      const route=makeRoute(points.map(p=>[p.x,p.z]));
+      addLocal(points[0],{role,route,walking:true,started:0,speed:.66});
+    } else addLocal(at,{role,heading:yaw,seated:role==='diner'});
   }
   const guards=cityGuards(world,skin);
   walkers.push(...guards);
@@ -399,8 +433,15 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
     for(const slot of matsWalk.values()) slot.used=0;
     for(person of walkers){
       if(person.stand&&view&&person.stand.seller.distanceToSquared(view)>tradeDistanceSquared)continue;
-      let moving=person.walking, gesture=0, offered=false;
-      if(person.post){
+      if(person.local&&view&&(person.local.x-view.x)**2+(person.local.z-view.z)**2>tradeDistanceSquared)continue;
+      let moving=person.walking, gesture=0, offered=false, cargo=0;
+      if(person.child){
+        const angle=time*1.11+person.phase;
+        x=person.x+Math.cos(angle)*person.child.rx;
+        z=person.z+Math.sin(angle)*person.child.rz;
+        yaw=Math.atan2(-Math.sin(angle)*person.child.rx,Math.cos(angle)*person.child.rz);
+        moving=true;
+      }else if(person.post){
         ({x,z}=person.post.position);
         yaw=person.post.yaw+.13*Math.sin(time*.61+person.phase);
       }else if(person.patrol){
@@ -438,8 +479,10 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
         x=cart.position.x-Math.sin(yaw)*1.93;z=cart.position.z-Math.cos(yaw)*1.93;
       }else if(person.walking) {
         [x,z,yaw]=sample(person.route,person.started+time*person.speed);
-        const offset=person.delivery?.095:Math.sin(person.phase)*.58;
+        const offset=person.delivery?.095:person.porter||person.role?0:Math.sin(person.phase)*.58;
         if(person.delivery)person.payload=(person.started+time*person.speed)%person.route.length<person.route.length*.50?1:0;
+        if(person.porter && person.route.segments[1].to>(person.started+time*person.speed)%person.route.length) cargo=person.porter;
+        if(person.role==='server')cargo=4;
         x+=Math.cos(yaw)*offset;
         z-=Math.sin(yaw)*offset;
         if(person.p===0||person.p===3){
@@ -456,7 +499,8 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
         }
       } else {
         ({x,z}=person);
-        yaw = (person.seated?Math.PI:person.phase) + .15*Math.sin(time*.64+person.phase);
+        yaw = (person.heading??person.phase) + .15*Math.sin(time*.64+person.phase);
+        if(person.role)gesture=(1+Math.sin(time*1.6+person.phase))*.50;
       }
       y=world.walkHeight(x,z)??groundY(x,z);
       if(person.post)y=person.post.position.y;
@@ -470,13 +514,14 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
       if(person.mount)y=person.mount.root.position.y+1.06+person.mount.bob;
       c=Math.cos(yaw);s=Math.sin(yaw);
       const progress=time*(4.1+person.speed*.97)+person.phase;
+      const digging=person.farmer?(1+Math.sin(time*2.8+person.phase))*.5:0;
       const stride=moving?Math.sin(progress):0;
-      const upper=person.seated?-.43+.012*Math.sin(time*2.4+person.phase):moving?.026*Math.cos(progress*2)
-        :.012*Math.sin(time*2.4+person.phase)-gesture*(person.buyer?.065:.025);
+      const upper=person.seated?-.43+.012*Math.sin(time*2.4+person.phase):person.child?.09*Math.abs(Math.sin(progress))
+        :moving?.026*Math.cos(progress*2):.012*Math.sin(time*2.4+person.phase)-gesture*(person.buyer?.065:.025)-digging*.21;
       const [robeColor,faceColor]=[person.shade,person.faces];
       const skirtLength=person.seated?.38:person.style===1?.79:.63;
       place('hem',0,.96-skirtLength/2+upper,0,person.style===1?.263:.218,skirtLength,.177,robeColor);
-      place('top',0,1.17+upper,0,.239,.46,.133,robeColor,.05);
+      place('top',0,1.17+upper,digging*.13,.239,.46,.133,robeColor,.05+digging*.36);
       place('belt',0,.962+upper,0,.173,.062,.151,black);
       place('neck',0,1.416+upper,.007,.06,.111,.058,faceColor);
       place('head',0,1.548+upper,.012,.101,.122,.096,faceColor);
@@ -514,9 +559,12 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
           place('chinGuard',side*.121,1.568+upper,-.036,.030,.127,.119,darkSteel);
           place('pauldron',side*.24,1.339+upper,0,.107,.091,.159,steel,.13);
         }
-        const forearm=person.guard&&side===1?[.309,1.12+upper,.255]
+        const forearm=person.farmer?[side*.15,.87+upper-digging*.14-side*.14,.27+digging*.18+side*.21]
+          :cargo?[side*.22,.88+upper,.33]
+          :person.guard&&side===1?[.309,1.12+upper,.255]
           :person.mount?[side*.155,.61,.43]:person.stand&&!moving?[side*.16,.87+upper+gesture*.27,.245+gesture*(side>0?.26:.09)]
-          :person.seated?[side*.14,.51+.021*Math.sin(time+person.phase),.31]:person.cart?[side*.22,.68+upper,.27]:person.payload===2 && side===1 ? [side*.17,1.43+upper,.12] :
+          :person.seated?[side*.14,.51+gesture*.18,.31]:person.role?[side*.17,.88+upper+gesture*.16,.25+gesture*.16]
+          :person.cart?[side*.22,.68+upper,.27]:person.payload===2 && side===1 ? [side*.17,1.43+upper,.12] :
           [side*(person.style===1?.191:.252),.854+upper,-legMotion*.129+.038];
         segment('arms',[side*.208,1.34+upper,.005],forearm,.092,robeColor);
         place('hand',...forearm,.052,.064,.049,faceColor);
@@ -524,6 +572,23 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
         segment('collar',[side*.105,1.396+upper,.087],[-side*.036,1.216+upper,.123],.021,pale);
       }
       if(person.payload===1) place('parcel',.229,.90+upper,.17,.181,.147,.117,grain);
+      if(cargo===1)place('cargoBox',0,1.0+upper,.38,.43,.34,.31,grain);
+      if(cargo===2)place('parcel',0,1.0+upper,.40,.24,.19,.17,grain);
+      if(cargo===3)place('cargoJar',0,1.03+upper,.39,.18,.42,.18,pale);
+      if(cargo===4){
+        place('cargoBox',0,.91+upper,.38,.50,.04,.32,pale);
+        place('cargoJar',0,1.02+upper,.38,.085,.18,.085,pale);
+      }
+      if(person.farmer){
+        const tip=[.44,.57+upper-digging*.31,.89+digging*.17];
+        segment('pole',[-.33,1.18+upper,-.23+digging*.18],tip,.024,grain);
+        if(person.farmer==='rake') {
+          place('hoe',...tip,.34,.047,.045,grain);
+          for(const tooth of [-.13,-.065,0,.065,.13]) {
+            place('hoe',tip[0]+tooth,tip[1]-.062,tip[2],.022,.13,.022,grain,.24);
+          }
+        } else place('hoe',...tip,.205,.103,.044,darkSteel,.58);
+      }
       if(person.payload===2){
         segment('pole',[-.61,1.436+upper,0],[.61,1.427+upper,0],.027,grain);
         for(const side of [-1,1]){
@@ -675,7 +740,7 @@ function createMounts(scene,world) {
 
 export function createLife(scene, world, small) {
   const random=seeded(1973);
-  const boats=buildVessels(scene,world.materials,random);
+  const boats=buildVessels(scene,world.materials,random,world.wharves);
   const carts=createCarts(scene,world.materials);
   const mounts=createMounts(scene,world);
   const walkers=createWalkers(scene,world,world.materials,random,small,boats,carts,mounts);

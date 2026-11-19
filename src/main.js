@@ -438,7 +438,20 @@ async function launch() {
     if(frame%5===1)placeLabels();
     if(frame%4===1)updateClock(dayHours);
     if(!byId('map-panel').hidden&&frame%10===1&&Math.hypot(player.x-markerX,player.z-markerZ)>.38)drawMap();
-    sound.update(stops[index]?.sound??'river',moving,Math.abs(player.x-bridgeX)<5&&Math.abs(player.z)<21,dt);
+    const {x:listenX,z:listenZ}=camera.position;
+    const onBridge=Math.abs(listenX-bridgeX)<5.6&&Math.abs(listenZ-riverCenter(bridgeX))<22;
+    const room=world.shopRooms.find(({x,z,w,d})=>Math.abs(listenX-x)<w/2&&Math.abs(listenZ-z)<d/2);
+    const atDock=world.wharves.some(({x,z,len,width})=>Math.abs(listenX-x)<len/2+2&&Math.abs(listenZ-z)<width/2+2.7);
+    let soundZone='river';
+    if(room) soundZone=room.tavern?'tavern':'shop';
+    else if(onBridge) soundZone='market';
+    else if(atDock) soundZone='dock';
+    else if(listenX<-84&&listenZ>14) soundZone='field';
+    else if(listenX>115&&listenZ<-31) soundZone='lane';
+    else if((listenX>-19&&listenX<104&&listenZ<-18&&listenZ>-31)
+      || (listenX>-20&&listenX<36&&listenZ>18&&listenZ<29)
+      || (listenX>119&&listenZ>-29&&listenZ<-18)) soundZone='market';
+    sound.update(soundZone,moving,onBridge,dt);
     if(!ready)display();
     frameHandle=requestAnimationFrame(animate);
   }

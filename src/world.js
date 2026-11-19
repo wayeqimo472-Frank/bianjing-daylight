@@ -70,6 +70,9 @@ export function createWorld(scene, textures, wind) {
   const surfaces = new Map();
   const obstacles = [];
   const decks = [];
+  const wharves = [];
+  const shopRooms = [];
+  const shopStaff = [];
   const trades = [];
   const gatePosts = [];
   const gateStairs = [];
@@ -341,6 +344,7 @@ export function createWorld(scene, textures, wind) {
       const sideX=theta===0 || theta===Math.PI;
       decks.push({ x0:entrance.x-(sideX?w:d)/2, x1:entrance.x+(sideX?w:d)/2,
         z0:z-(sideX?d:w)/2, z1:z+(sideX?d:w)/2, y:ground+.225 });
+      shopRooms.push({ x,z,w,d, tavern:kind==='tavern' });
     }
 
     const bays=Math.max(2,Math.round(w/2.1));
@@ -419,7 +423,13 @@ export function createWorld(scene, textures, wind) {
           beam('iron',p.clone().add(V(0,.17,0)),p.clone().add(V(0,.76,0)),.018,.018,cylinder);
         }
         const tables=[[-3.8,.25],[3.5,.15],[-2.9,-3.4],[2.9,-3.4]];
+        shopStaff.push({role:'server',points:[f(0,0,front-1),f(0,0,1),f(0,0,-2.6),f(0,0,1)]});
+        shopStaff.push({role:'host',at:f(1.15,0,front-1.0),yaw:theta});
         for (const [a,b] of tables) {
+          if(Math.abs(a)+.8>w/2 || Math.abs(b)+.9>d/2) continue;
+          for(const side of [-1,1]) {
+            shopStaff.push({role:'diner',at:f(a+side*.27,0,b+side*.83),yaw:theta+(side>0?Math.PI:0)});
+          }
           part('oldwood',a,.85,b,1.63,.11,1.19);
           for (const u of [-.63,.63]) for (const v of [-.44,.44]) part('timber',a+u,.49,b+v,.11,.73,.11);
           part('timber',a,.47,b+.83,1.48,.10,.31);
@@ -448,6 +458,9 @@ export function createWorld(scene, textures, wind) {
         }
         for (let k=0;k<6;k++) part(k%2?'linen':'sage',w*.28,.32+k*.16,front-.70,.99,.145,.64);
         trade(f,theta,Math.min(w*.23,1.45),-1.73,.14,front-.46,kind==='market'?'fruit':'pot');
+        const aisle=Math.min(w*.26,1.6);
+        shopStaff.push({role:'assistant',at:f(-aisle,0,-1.68),yaw:theta});
+        shopStaff.push({role:'shopper',at:f(-aisle,0,.35),yaw:theta+Math.PI});
       }
       if (kind!=='tavern') awning(f,theta,w+.40,1.95,2.94,front);
       else {
@@ -498,8 +511,9 @@ export function createWorld(scene, textures, wind) {
     localBarrier(f,0,0,w,1.08);
   }
 
-  function wharf(x,z,len,width) {
+  function wharf(x,z,len,width,side=1,extra=false) {
     const deckY=.44;
+    wharves.push({x,z,len,width,side,extra});
     for(let i=0; i<len/.27; i++){
       box('oldwood',x-len/2+i*.27,deckY-.08,z,.247,.16,width);
     }
@@ -513,8 +527,12 @@ export function createWorld(scene, textures, wind) {
     decks.push({ x0:x-len/2, x1:x+len/2, z0:z-width/2, z1:z+width/2, y:deckY });
     for(let i=0;i<12;i++) {
       const px=x-len*.41+i*(len*.82/11);
-      if(i%3===0) crate(px,deckY,z-width*.30,.7+random()*.45);
-      else basket(px,deckY,z-width*.30,.72+random()*.48);
+      const row=z-side*width*.30;
+      const size=.70+random()*.45;
+      if(i%4===0) crate(px,deckY,row,size);
+      else if(i%4===1) jug(px,deckY,row,size,'paleCeramic');
+      else if(i%4===2) solid(foot,'straw',V(px,deckY+.24,row),V(.36,.57,.30),.2);
+      else basket(px,deckY,row,size);
     }
   }
 
@@ -905,7 +923,7 @@ export function createWorld(scene, textures, wind) {
   decks.push({x0:-41.0,x1:-32.8,z0:5.65,z1:7.45,y:.044});
   wharf(-26,14.65,8.1,4.80);
   wharf(15,16.2,12.6,5.35);
-  wharf(47,-13.2,13.5,4.5);
+  wharf(47,-13.2,13.5,4.5,-1);
   bridge();
   for(const [side,z,kind] of [[1,-7.2,'bread'],[-1,-10.3,'fruit'],[1,8.7,'pot'],[-1,12.7,'cloth']]) {
     stall(bridgeX+side*3.91,z,-side*Math.PI/2,1.68,kind,true);
@@ -1027,6 +1045,17 @@ export function createWorld(scene, textures, wind) {
     }
   }
 
+  for(const [x,side] of [[-64,1],[25,-1]]) {
+    const bank=riverCenter(x)+side*riverHalf(x);
+    const z=bank-side*.40;
+    wharf(x,z,11.2,5.8,side,true);
+    const road=side>0?18:-23;
+    lane([[x,bank+side*2],[x,road]],1.8,'path');
+    box('oldwood',x,.12,z+side*3.27,1.8,.24,.86);
+    decks.push({x0:x-.90,x1:x+.90,z0:z+Math.min(side*2.85,side*3.70),
+      z1:z+Math.max(side*2.85,side*3.70),y:.24});
+  }
+
   for(const { geo, mat, entries } of meshGroups.values()){
     const mesh=new T.InstancedMesh(geo,materials[mat],entries.length);
     for(const [i,[matrix,shade]] of entries.entries()){
@@ -1089,5 +1118,6 @@ export function createWorld(scene, textures, wind) {
     const walls=(meetsTerrace||onGateTerrace(x,z,elevation))?towerObstacles:obstacles;
     return walls.some(o=>x>o.x0-margin&&x<o.x1+margin&&z>o.z0-margin&&z<o.z1+margin);
   }
-  return { materials, walkHeight, isObstacle, obstacles, trades, gatePosts, gateTerrace, gateStairs, onGateTerrace };
+  return { materials, walkHeight, isObstacle, obstacles, trades, wharves, shopRooms, shopStaff,
+    gatePosts, gateTerrace, gateStairs, onGateTerrace };
 }
