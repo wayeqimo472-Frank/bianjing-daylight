@@ -27,3 +27,7 @@ npx serve dist
 ## 技术
 
 Three.js、原生 JavaScript、esbuild。`src/` 保存场景与交互代码；`dist/` 是可直接托管的静态网站文件。
+
+## 音效素材
+
+市集底声取自 kayaker25 的 [urbanmarket2](https://freesound.org/people/kayaker25/sounds/849935/)，采用 CC0 许可。项目使用经剪辑和均衡处理的片段。

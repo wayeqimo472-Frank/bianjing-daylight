@@ -2,41 +2,9 @@ export function setupSound(button, label) {
   let sound, active=true, lastStep=0;
   const unlock = new AbortController();
   const zones={
-    field:[390,.078,0,.026], river:[490,.125,.022,.014], dock:[650,.095,.30,.006],
-    market:[950,.043,.48,0], shop:[670,.025,.31,0], tavern:[810,.014,.54,0], lane:[510,.046,.075,.012],
+    field:[390,.078,0,.026], river:[490,.105,.06,.014], dock:[650,.065,.41,.006],
+    market:[850,.028,.65,0], shop:[540,.016,.43,0], tavern:[630,.012,.69,0], lane:[470,.041,.13,.012],
   };
-  const chatterVoices=[[108,510,1110],[142,430,1510],[184,660,1740],[121,320,1330],
-    [163,580,1870],[221,420,2170],[196,740,1480],[132,490,2000],[153,390,1180]];
-  function makeChatter(audio) {
-    const rate=22050, seconds=13;
-    const buffer=audio.createBuffer(1,rate*seconds,rate);
-    const samples=buffer.getChannelData(0);
-    for(const [pitch,f1,f2] of chatterVoices) {
-      let start=Math.random()*rate;
-      while(start<samples.length) {
-        const phrase=.8+Math.random()*2.3;
-        const syllables=3+Math.floor(Math.random()*6);
-        for(let j=0;j<syllables;j++) {
-          const onset=Math.floor(start+j*phrase*rate/syllables);
-          const count=Math.floor(rate*(.083+Math.random()*.14));
-          const base=pitch*(.82+Math.random()*.38);
-          const strength=.045+Math.random()*.065;
-          const first=Math.round(f1/base)*base;
-          const second=Math.round(f2/base)*base;
-          let phase=0;
-          for(let k=0;k<count;k++) {
-            const u=k/count;
-            phase+=2*Math.PI*base/rate*(1.10-u*.23);
-            const shape=Math.sin(Math.PI*u)*Math.min(1,u*12);
-            const voice=Math.sin(phase)*.22+Math.sin(phase*first/base)*.49+Math.sin(phase*second/base)*.25;
-            samples[(onset+k)%samples.length]+=strength*shape*(voice+(Math.random()-.5)*(.20+u*.18));
-          }
-        }
-        start+=rate*(phrase+.19+Math.random()*.91);
-      }
-    }
-    return buffer;
-  }
   function engine() {
     const audio=new AudioContext();
     const noise=audio.createBuffer(1,audio.sampleRate*9,audio.sampleRate);
@@ -49,9 +17,9 @@ export function setupSound(button, label) {
     const output=audio.createGain();
     output.gain.value=0;
     output.connect(audio.destination);
-    function bed(type, frequency,rate,buffer=noise){
+    function bed(type, frequency,rate){
       const track=audio.createBufferSource(),filter=audio.createBiquadFilter(),gain=audio.createGain();
-      track.buffer=buffer;
+      track.buffer=noise;
       track.loop=true;
       track.playbackRate.value=rate;
       filter.type=type;
@@ -61,9 +29,24 @@ export function setupSound(button, label) {
       track.start(Math.random()*1.2);
       return {filter,gain};
     }
-    const chatter=makeChatter(audio);
-    return {audio,noise,output,wind:bed('lowpass',510,1.22),
-      crowd:bed('lowpass',1650,1,chatter),distant:bed('lowpass',890,.87,chatter)};
+    const wind=bed('lowpass',510,1.22);
+    return {audio,noise,output,wind,crowd:null,crowdLoading:null};
+  }
+  async function loadCrowd(engine) {
+    const {audio,output}=engine;
+    const response=await fetch('./assets/market-ambience.mp3');
+    if(!response.ok) throw new Error('Market ambience failed to load');
+    const buffer=await audio.decodeAudioData(await response.arrayBuffer());
+    const track=audio.createBufferSource(), filter=audio.createBiquadFilter(), gain=audio.createGain();
+    track.buffer=buffer;
+    track.loop=true;
+    filter.type='lowpass';
+    filter.Q.value=.15;
+    filter.frequency.value=900;
+    gain.gain.value=0;
+    track.connect(filter).connect(gain).connect(output);
+    track.start();
+    engine.crowd={filter,gain};
   }
   function render() {
     button.setAttribute('aria-pressed',String(active));
@@ -76,7 +59,10 @@ export function setupSound(button, label) {
       sound??=engine();
       sound.output.gain.setTargetAtTime(.72,sound.audio.currentTime,.12);
       await sound.audio.resume();
-      if (sound.audio.state==='running') unlock.abort();
+      if (sound.audio.state==='running') {
+        unlock.abort();
+        sound.crowdLoading??=loadCrowd(sound).catch(()=>{sound.crowdLoading=null;});
+      }
       render();
     }catch{
       render();
@@ -119,21 +105,23 @@ export function setupSound(button, label) {
     const t=audio.currentTime;
     sound.wind.filter.frequency.setTargetAtTime(frequency,t,.35);
     sound.wind.gain.gain.setTargetAtTime(breeze*(.77+.15*Math.sin(t*.8)+.11*Math.cos(t*.31)),t,.4);
-    sound.crowd.filter.frequency.setTargetAtTime(frequency*2.3,t,.45);
-    sound.crowd.gain.gain.setTargetAtTime(crowd,t,.55);
-    sound.distant.gain.gain.setTargetAtTime(crowd*.50,t,.65);
-    nextTradeSound-=dt;
-    if(nextTradeSound<=0 && ['dock','market','shop','tavern'].includes(zone)){
+    if(sound.crowd){
+      sound.crowd.filter.frequency.setTargetAtTime(frequency*1.9,t,.65);
+      sound.crowd.gain.gain.setTargetAtTime(crowd,t,.8);
+    }
+    if(zone==='dock') nextTradeSound-=dt;
+    if(nextTradeSound<=0){
       const knock=audio.createBufferSource(), tone=audio.createBiquadFilter(), level=audio.createGain();
       knock.buffer=noise;
-      tone.type='bandpass';
-      tone.frequency.value=zone==='dock'?310:zone==='market'?560:1580;
-      tone.Q.value=zone==='dock'?2.0:5.5;
-      level.gain.setValueAtTime(zone==='dock'?.29:.21,t);
-      level.gain.exponentialRampToValueAtTime(.001,t+.12);
+      tone.type='lowpass';
+      tone.frequency.value=360;
+      tone.Q.value=.2;
+      level.gain.setValueAtTime(.001,t);
+      level.gain.exponentialRampToValueAtTime(.10,t+.024);
+      level.gain.exponentialRampToValueAtTime(.001,t+.19);
       knock.connect(tone).connect(level).connect(output);
-      knock.start(t,Math.random()*7,.13);
-      nextTradeSound=1.2+Math.random()*3.3;
+      knock.start(t,Math.random()*7,.20);
+      nextTradeSound=4+Math.random()*6;
     }
     if(moving&&t-lastStep>.40){
       const pulse=audio.createBufferSource(),filter=audio.createBiquadFilter(),gain=audio.createGain();
