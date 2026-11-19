@@ -316,6 +316,13 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
       }
     }
   }
+  const bridgeTraffic=makeRoute([[-5.35,25],[-5.35,-22.8],[-4,-24.4],[-2.65,-22.8],[-2.65,24],[-4,25.8]]);
+  const extraCrossers=isMobile?7:12;
+  for(let i=0;i<extraCrossers;i++) {
+    walkers.push({route:bridgeTraffic,started:bridgeTraffic.length*(i+.42)/extraCrossers,speed:.94+i%3*.045,
+      walking:true,style:i%3,scale:.89+i%4*.038,shade:new T.Color(robe[(i+3)%robe.length]),
+      faces:new T.Color(skin[i%skin.length]),p:2,payload:i%4===0?2:i%3===0?1:0,phase:i*1.69});
+  }
   const delivery=makeRoute([[-36.52,7.29],[-36.52,12.36],[-34.9,15.1],[-32.5,18.7],[-32.15,18.44],
     [-35.3,15.2],[-36.52,12.6],[-36.52,9.4]]);
   for(let r=0;r<2;r++){
@@ -369,11 +376,11 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
     [129.5,-45.2,1.35,.82],[147.2,-45.55,1.6,.79],[6,23,1.45,.78]]) {
     for(let i=0;i<2;i++) addLocal({x,z},{child:{rx,rz},scale:.56+i*.10,speed:1.5,phase:i*1.1+x*.2});
   }
-  for(const {role,at,yaw,points} of world.shopStaff) {
+  for(const {role,at,yaw,points,level} of world.shopStaff) {
     if(points) {
       const route=makeRoute(points.map(p=>[p.x,p.z]));
-      addLocal(points[0],{role,route,walking:true,started:0,speed:.66});
-    } else addLocal(at,{role,heading:yaw,seated:role==='diner'});
+      addLocal(points[0],{role,route,level,walking:true,started:0,speed:.66});
+    } else addLocal(at,{role,level,heading:yaw,seated:role==='diner'});
   }
   const guards=cityGuards(world,skin);
   walkers.push(...guards);
@@ -503,6 +510,7 @@ function createWalkers(scene,world,mats,random,isMobile,boats,carts,mounts) {
         if(person.role)gesture=(1+Math.sin(time*1.6+person.phase))*.50;
       }
       y=world.walkHeight(x,z)??groundY(x,z);
+      if(person.level!==undefined)y=person.level;
       if(person.post)y=person.post.position.y;
       if(person.boat){
         const boat=person.boat.root;

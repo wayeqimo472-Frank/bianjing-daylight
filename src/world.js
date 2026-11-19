@@ -73,6 +73,7 @@ export function createWorld(scene, textures, wind) {
   const wharves = [];
   const shopRooms = [];
   const shopStaff = [];
+  const shopLofts = [];
   const trades = [];
   const gatePosts = [];
   const gateStairs = [];
@@ -318,7 +319,82 @@ export function createWorld(scene, textures, wind) {
     beam('timber',p(0,rows),p(cols,rows),.044,.044,cylinder);
   }
 
-  function house(x,z,w,d,{ theta=0, floors=1, kind='home', label, simple=false, roofKind='tile' }={}) {
+  // The two walkable lofts face the main street (theta = 0).
+  function shopLoft(f, part, w, d, bays, label) {
+    const front=d/2, back=-front;
+    const left=-w/2+.13, right=w/2-.13;
+    const start=2.8, top=-2.86, stairLeft=right-1.42;
+    const floor=3.30, ground=.225, steps=17;
+    const rise=(floor-ground)/steps, run=(start-top)/steps;
+    const rect=(a,b,c,e)=>{
+      const p=f(a,0,c), q=f(b,0,e);
+      return {x0:p.x,x1:q.x,z0:p.z,z1:q.z};
+    };
+    const obstacles=[];
+    function block(a,b,width,depth) {
+      obstacles.push(rect(a-width/2,a+width/2,b-depth/2,b+depth/2));
+    }
+    function planks(a,b,c,e) {
+      for(let z=c;z<e;z+=.25) {
+        const depth=Math.min(.25,e-z);
+        part('oldwood',(a+b)/2,floor-.09,z+depth/2,b-a,.18,depth);
+      }
+    }
+    planks(left,stairLeft,back,front);
+    planks(stairLeft,right,back,top);
+    planks(stairLeft,right,start,front);
+    const stair={...rect(stairLeft,right,top,start),from:f(0,0,start).z,run,rise,base:f(0,ground,0).y,steps};
+    const y=f(0,floor,0).y;
+    shopLofts.push({...rect(left,right,back,front),stair,y,obstacles,label});
+    const stairX=(stairLeft+right)/2;
+    for(let i=0;i<steps;i++) {
+      const z=start-(i+.5)*run, height=ground+(i+1)*rise;
+      part('timber',stairX,(height+ground)/2,z,1.42,height-ground,run+.006);
+      part('oldwood',stairX,height-.038,z,1.48,.075,run+.034);
+    }
+    for(const a of [stairLeft+.045,right-.045]) {
+      beam('oldwood',f(a,ground+.87,start),f(a,floor+.87,top),.075,.082);
+      for(let i=0;i<=steps;i+=4) {
+        const height=ground+i*rise;
+        part('timber',a,height+.39,start-i*run,.067,.84,.067);
+      }
+    }
+    for(const [a,b,width,depth] of [[stairLeft,(top+start)/2,.10,start-top],
+      [stairX,start,1.42,.10],[0,front-.11,w-.22,.12]]) {
+      part('oldwood',a,floor+.79,b,width,.095,depth);
+      block(a,b,width,depth);
+      const alongX=width>depth, span=alongX?width:depth;
+      for(let t=-span/2+.12;t<span/2;t+=.47) {
+        part('timber',a+(alongX?t:0),floor+.40,b+(alongX?0:t),.065,.76,.07);
+      }
+    }
+    for(let j=0;j<bays;j++) {
+      const jamb=(j/bays-.5)*w+.16;
+      // The lattice leaf is folded back along the jamb so the street stays visible.
+      solid(unit,'timber',f(jamb,floor+1.50,front-.24),V(.075,1.24,.48),0,.91);
+      for(const h of [1.09,1.34,1.59,1.84]) part('oldwood',jamb-.025,floor+h,front-.24,.078,.043,.49);
+    }
+    const spots=[[-w*.30,front-1.44],[-w*.055,front-1.51],[-w*.29,-.80]];
+    for(const [a,b] of spots) {
+      part('oldwood',a,floor+.83,b,1.32,.11,.89);
+      for(const dx of [-.47,.47]) for(const dz of [-.30,.30]) part('timber',a+dx,floor+.40,b+dz,.09,.77,.09);
+      block(a,b,1.32,.89);
+      part('timber',a,floor+.42,b-.77,1.18,.10,.32);
+      block(a,b-.77,1.18,.32);
+      for(const dx of [-.42,.42]) part('oldwood',a+dx,floor+.20,b-.77,.11,.39,.29);
+      for(const dx of [-.29,.29]) {
+        const cup=f(a+dx,floor+.89,b-.08);
+        jug(cup.x,cup.y,cup.z,.19,'paleCeramic');
+        shopStaff.push({role:'diner',at:f(a+dx,0,b-.77),yaw:0,level:y});
+      }
+    }
+    const serverX=stairLeft-.57;
+    shopStaff.push({role:'server',points:[f(serverX,0,front-1.05),f(serverX,0,top-.75)],level:y});
+    part('beam',stairX,2.45,start+.62,.69,.29,.078);
+    sign(f,0,'登樓',stairX,2.45,start+.67,.61,.25);
+  }
+
+  function house(x,z,w,d,{ theta=0, floors=1, kind='home', label, simple=false, roofKind='tile', loft=false }={}) {
     const ground=groundY(x,z);
     const f=local(x,ground,z,theta);
     const body=floors===1 ? 3.31 : 6.13;
@@ -339,7 +415,7 @@ export function createWorld(scene, textures, wind) {
       }
       part('beam',0,body-.17,0,w,.32,d);
       for (let a=-d/2+.12; a<d/2; a+=.28) part('oldwood',0,.181,a,w-.25,.08,.24);
-      if (floors===2) part('beam',0,3.20,0,w,.20,d);
+      if (floors===2 && !loft) part('beam',0,3.20,0,w,.20,d);
       const entrance = f(0,ground+.23,front);
       const sideX=theta===0 || theta===Math.PI;
       decks.push({ x0:entrance.x-(sideX?w:d)/2, x1:entrance.x+(sideX?w:d)/2,
@@ -378,7 +454,7 @@ export function createWorld(scene, textures, wind) {
         for (let k=0;k<6;k++) part('oldwood',.15*(k-2.5),.98,front+.112,.136,1.91,.035);
         for(const s of [-1,1]) shutter(f,theta,s*w*.31,1.94,front+.08,w*.22,1.03);
       }
-      if (floors===2) {
+      if (floors===2 && !loft) {
         if (kind==='tavern') {
           part('oldwood',0,3.34,front+.53,w,.17,1.45);
           for (let j=0;j<bays;j++) {
@@ -398,16 +474,19 @@ export function createWorld(scene, textures, wind) {
         part('beam',0,3.16,back-.12,w+.14,.11,.14);
       }
     roof(f,w+1.52,d+1.70,body+.02,Math.min(w,d)*.31,roofKind,detail);
-    if (floors===2 && detail) roof(f,w+.9,d+2.4,3.09,.68,'tileDark',true);
+    if (loft) {
+      shopLoft(f,part,w,d,bays,label);
+      roof((a,b,c)=>f(a,b,c+front+.45),w+.90,1.10,3.06,.20,'tileDark');
+    } else if (floors===2 && detail) roof(f,w+.9,d+2.4,3.09,.68,'tileDark',true);
     if (shop) {
       if (kind==='tavern') {
         for(const face of [-1,1]){
           for(let j=0;j<4;j++){
             const z=front-1.2-j*2.3;
-            part('timber',face*(w/2-.13),1.65,z,.14,3.3,.16);
+            if(!loft||face<0||z>3.0||z< -3.0)part('timber',face*(w/2-.13),1.65,z,.14,3.3,.16);
           }
         }
-        for(let j=0;j<7;j++)part('timber',0,2.98,front-.21-j*d/7,w,.20,.14);
+        for(let j=0;j<7;j++)part('timber',loft?-.78:0,2.98,front-.21-j*d/7,loft?w-1.56:w,.20,.14);
         part('oldwood',0,1.09,back+.44,w*.55,.142,.47);
         part('timber',0,.67,back+.40,w*.56,.78,.50);
         for(let i=0;i<8;i++){
@@ -443,16 +522,17 @@ export function createWorld(scene, textures, wind) {
           jug(jar.x,jar.y,jar.z,.59,'paleCeramic');
         }
       } else {
-        part('oldwood',0,1.09,-.85,w-.7,.16,.98);
-        part('timber',0,.55,-.85,w-.81,.95,.82);
-        localBarrier(f,0,-.85,w-.59,.99);
+        const counterX=loft?-.68:0, counterW=loft?w-2.06:w-.70;
+        part('oldwood',counterX,1.09,-.85,counterW,.16,.98);
+        part('timber',counterX,.55,-.85,counterW-.11,.95,.82);
+        localBarrier(f,counterX,-.85,counterW+.11,.99);
         for (let s=0;s<2;s++) {
           const a=(s-.5)*w*.82;
           part('oldwood',a,1.61,back+.50,w*.35,.10,.55);
           part('oldwood',a,2.16,back+.49,w*.35,.09,.56);
         }
         for (let k=0;k<8;k++) {
-          const jar=f((k/7-.5)*(w-1),1.18,-.78+random()*.34);
+          const jar=f(counterX+(k/7-.5)*(counterW-.30),1.18,-.78+random()*.34);
           if (kind==='market') basket(jar.x,jar.y,jar.z,.40+random()*.43);
           else jug(jar.x,jar.y,jar.z,.43+random()*.70,k%3?'ceramic':'paleCeramic');
         }
@@ -729,9 +809,9 @@ export function createWorld(scene, textures, wind) {
     masonry((4.36+start)/2,(near+.24+upper-width/2)/2,start-4.36,near+.24-(upper-width/2),floor,.93);
     gateStairs.push({paths,turn,exit});
     for(const flank of [-1,1]){
-      const p=f(side*(start-.83),0,lower+flank*1.24);
+      const p=f(side*(start-(flank>0?2.05:.96)),0,lower+flank*1.29);
       p.y=groundY(p.x,p.z);
-      gatePosts.push({position:p,yaw:(side>0?Math.PI:0)+flank*.13});
+      gatePosts.push({position:p,yaw:(side>0?Math.PI:0)+flank*.13,stairFoot:true});
     }
     const marker=side*(start-.27),post=lower-1.00;
     sign(f,side>0?Math.PI:0,'登城',marker-side*.054,1.88,post,.43,.85,true);
@@ -942,7 +1022,7 @@ export function createWorld(scene, textures, wind) {
     [48,-34.1,8.3,8.6,'store','瓷器'],[58.4,-35.7,8.2,9.4,'market','糧行'],
     [69,-36.2,11.8,12.35,'tavern','酒樓'],[82.5,-35.7,9.0,10.4,'store','茶坊'],
     [94,-35.3,8.65,8.6,'market','竹器']
-  ]) house(x,z,w,d,{floors:2,kind,label});
+  ]) house(x,z,w,d,{floors:2,kind,label,loft:x===69||x===82.5});
   for(const [x,z,w,d,kind,label] of [
     [-20,-33.6,8.5,7.4,'home'],[-10,-34.6,7.9,7.5,'market','茶'],
     [9,29.5,8.2,7.0,'market','茶'],[20,34,10.2,8.5,'tavern','酒'],
@@ -1098,6 +1178,15 @@ export function createWorld(scene, textures, wind) {
   function walkHeight(x,z,elevation=0) {
     if (x<bounds.west||x>bounds.east||z<bounds.north||z>bounds.south) return null;
     if(onGateTerrace(x,z,elevation))return gateTerrace.floor;
+    for(const loft of shopLofts){
+      if(!inRect(loft,x,z))continue;
+      const stair=loft.stair;
+      if(inRect(stair,x,z)){
+        const tread=Math.min(stair.steps,1+Math.floor((stair.from-z)/stair.run));
+        return stair.base+tread*stair.rise;
+      }
+      if(elevation>=loft.y-.65)return loft.y;
+    }
     const stair=stairSurface(x,z);
     if(stair){
       if(stair.level!==undefined)return stair.level;
@@ -1112,12 +1201,20 @@ export function createWorld(scene, textures, wind) {
     return groundY(x,z);
   }
   function isObstacle(x,z,margin=.30,elevation=0){
+    for(const loft of shopLofts) {
+      const stair=loft.stair;
+      if(inRect(stair,x,z))return x<stair.x0+.06+margin||x>stair.x1-.06-margin;
+      if(elevation>=loft.y-.65&&inRect(loft,x,z)) {
+        if(x<loft.x0+margin||x>loft.x1-margin||z<loft.z0+margin)return true;
+        return loft.obstacles.some(o=>x>o.x0-margin&&x<o.x1+margin&&z>o.z0-margin&&z<o.z1+margin);
+      }
+    }
     const stair=stairSurface(x,z);
     if(stair?.count&&(x<stair.x0+.16+margin||x>stair.x1-.16-margin))return true;
     const meetsTerrace=stair&&elevation>=gateTerrace.floor-.65;
     const walls=(meetsTerrace||onGateTerrace(x,z,elevation))?towerObstacles:obstacles;
     return walls.some(o=>x>o.x0-margin&&x<o.x1+margin&&z>o.z0-margin&&z<o.z1+margin);
   }
-  return { materials, walkHeight, isObstacle, obstacles, trades, wharves, shopRooms, shopStaff,
+  return { materials, walkHeight, isObstacle, obstacles, trades, wharves, shopRooms, shopStaff, shopLofts,
     gatePosts, gateTerrace, gateStairs, onGateTerrace };
 }
